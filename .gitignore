@@ -21,3 +21,9 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+
+*.ai 
+*.psd
+WeedInfoLogo.svg
+WeedInfoLogoOnly.svg
