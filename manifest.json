@@ -1,11 +1,18 @@
 {
+  "id": "./index.html",
   "short_name": "WeedInfo",
   "name": "WeedInfo",
+  "description": "Informatie over de Cannabis binnen Nederland.",
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "favicon-16x16.png",
+      "sizes": "16x16",
+      "type": "image/png"
+    },
+    {
+      "src": "favicon-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
     },
     {
       "src": "android-chrome-192x192.png",
@@ -20,6 +27,8 @@
   ],
   "start_url": "./index.html",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "theme_color": "#ffffff",
+  "background_color": "#ffffff",
+  "orientation": "portrait",
+  "lang": "nl-NL"
 }
