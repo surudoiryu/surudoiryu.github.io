@@ -6,12 +6,19 @@ export type ProductType = {
     type: string;
     thumbnailUrl: string;
     description: string;
-    thc: number;
-    cbd: number;
+    thcMin: number;
+    thcMax: number;
+    cbdMin: number;
+    cbdMax: number;
     rating: number;
     images: ProductImages;
+    dominantTerpene: ProductTerpenes;
     terpenes: ProductTerpenes[];
-    effects: ProductEffects[];
+    tastes: ProductTastes[];
+    dominantPositiveEffect: ProductEffects;
+    positiveEffects: ProductEffects[];
+    dominantNegativeEffect: ProductEffects;
+    negativeEffects: ProductEffects[];
 };
 
 export type ProductImages = {
@@ -27,9 +34,15 @@ export type ProductTerpenes = {
     relaxing: number;
     medical: string;
     effect: string;
+    color: string;
 }
 
 export type ProductEffects = {
+    id: number;
+    name: string;
+}
+
+export type ProductTastes = {
     id: number;
     name: string;
 }

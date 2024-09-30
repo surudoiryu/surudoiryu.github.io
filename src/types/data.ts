@@ -1,9 +1,10 @@
 import { ProductType } from "./product";
 import { ShopType } from "./shop";
+import { GrowerType } from "./grower";
 
 export type ListType = {
     loading: boolean;
-    list: unknown & Array<ProductType> & Array<ShopType>;
+    list: unknown & Array<ProductType & ShopType & GrowerType>;
     page: number;
 };
 

@@ -17,6 +17,7 @@ import WeekendIcon from '@mui/icons-material/Weekend';
 import ProductRating from "./Rating";
 
 import VolunteerActivismOutlinedIcon from '@mui/icons-material/VolunteerActivismOutlined';
+import ThumbDownOffAltIcon from '@mui/icons-material/ThumbDownOffAlt';
 import CircleIcon from '@mui/icons-material/Circle';
 
 type Props = {
@@ -45,6 +46,7 @@ const ProductCard = ({ product }: Props) => {
                 height="230"
                 image={product.thumbnailUrl}
                 alt={product.title}
+                sx={{ objectFit: "scale-down" }}
             />
             <CardContent sx={{ textAlign: 'left' }}>
                 <Chip size="small" icon={<BoltIcon />} label="Sativa Dominant" variant="outlined" />
@@ -58,16 +60,16 @@ const ProductCard = ({ product }: Props) => {
 
                 <br />
                 <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-                    THC {product.thc}% CBD {product.cbd}%
+                    THC {product.thcMin}%-{product.thcMax}%<br />
+                    CBD &lt; {product.cbdMax}%<br />
+                    <br />
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    {product.effects.map((effect) => {
-                        return <><VolunteerActivismOutlinedIcon fontSize="small" /> {effect.name}</>
-                    })}
+                    <VolunteerActivismOutlinedIcon fontSize="small" /> {product.dominantPositiveEffect.name}
                     &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    {product.terpenes.map((terpene) => {
-                        return <><CircleIcon fontSize="small" htmlColor="#ff0000" /> {terpene.name}</>
-                    })}
+                    <ThumbDownOffAltIcon fontSize="small" /> {product.dominantNegativeEffect.name}
+                    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <CircleIcon fontSize="small" htmlColor={product.dominantTerpene.color} /> {product.dominantTerpene.name}
                 </Typography>
             </CardContent>
         </Card>

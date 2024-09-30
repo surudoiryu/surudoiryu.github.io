@@ -3,6 +3,7 @@ import React from 'react'
 
 interface MarkerProps {
     className?: string
+    image?: string
     draggable: boolean
     lat: number
     lng: number
@@ -18,6 +19,7 @@ interface MarkerProps {
 
 const Marker = ({
     className,
+    image,
     lat,
     lng,
     markerId,
@@ -31,17 +33,17 @@ const Marker = ({
     onDragStart,
     ...props
 }: MarkerProps) =>
-    lat && lng ? (
+    lat && lng && image ? (
         <img
             className={className}
-            src={`${process.env.NEXT_PUBLIC_MEDIA_URL ?? ''}/marker-pin.png`}
+            src={`${image}`}
             // lat={lat}
             // lng={lng}
             onClick={(e) => (onClick ? onClick(e, { markerId, lat, lng }) : null)}
-            style={{ fontSize: 40 }}
+            style={{ fontSize: 40, backgroundColor: "#ffffff", borderRadius: "50px", padding: "10px", objectFit: "scale-down" }}
             alt={markerId}
-            width={35}
-            height={35}
+            width={50}
+            height={50}
             {...props}
         />
     ) : null

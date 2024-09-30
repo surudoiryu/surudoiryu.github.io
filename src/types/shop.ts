@@ -4,6 +4,16 @@ export type ShopType = {
     lat: number;
     lng: number;
     rating: number;
+    logo: string;
+    promo: boolean;
+    pickup: boolean;
+    drive: boolean;
+    payByCard: boolean;
+    easyParking: boolean;
+    allowForeigns: boolean;
+    openFrom: string;
+    openTill: string;
+    distance: number;
 };
 
 
