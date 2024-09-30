@@ -31,7 +31,7 @@ const GrowerCard = ({ grower }: Props) => {
             />
             <CardMedia
                 component="img"
-                height="230"
+                height="120"
                 image={grower.thumbnailUrl}
                 alt={grower.title}
                 sx={{ objectFit: "scale-down"}}

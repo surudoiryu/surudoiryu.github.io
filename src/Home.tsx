@@ -84,7 +84,7 @@ export default function PageHome({ productList, growerList, setCurrentPage }: Pr
                     <>
                         <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
                             {growerList.list.slice(0,10).map((grow: GrowerType) => (
-                                <div style={{ minWidth: 350, height: 350, margin: 16 }}>
+                                <div style={{ minWidth: 250, height: 280, margin: 16 }}>
                                     <GrowerCard grower={grow} />
                                 </div>
                             ))}

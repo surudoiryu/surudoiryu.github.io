@@ -111,7 +111,14 @@ export const getProductData = ():Promise<Array<ProductType>> => {
                         },
                     ],
                     thumbnailUrl:'https://fyta.group/assets/components/phpthumbof/cache/f48-1024x1024-amnesia-2.9d3f60e6cb2744deb922f8634e005503.webP',
-                    type:'weed'
+                    type:'weed',
+                    variants: [
+                        {
+                            id: 1,
+                            ean: '984765123156',
+                            name: '1 gram'
+                        }
+                    ]
                 },
                 {
                     id: 2,
@@ -208,7 +215,14 @@ export const getProductData = ():Promise<Array<ProductType>> => {
                         },
                     ],
                     thumbnailUrl: 'https://fyta.group/assets/components/phpthumbof/cache/f76-1024-1024-fritter-licker-bud.9d3f60e6cb2744deb922f8634e005503.webP',
-                    type: 'weed'
+                    type: 'weed',
+                    variants: [
+                        {
+                            id: 1,
+                            ean: '984765123156',
+                            name: '1 gram'
+                        }
+                    ]
                 },
                 {
                     id: 3,
@@ -313,7 +327,14 @@ export const getProductData = ():Promise<Array<ProductType>> => {
                         },
                     ],
                     thumbnailUrl: 'https://fyta.group/assets/components/phpthumbof/cache/f50-1024x1024-3chems-top-goed.9d3f60e6cb2744deb922f8634e005503.webP',
-                    type: 'weed'
+                    type: 'weed',
+                    variants: [
+                        {
+                            id: 1,
+                            ean: '984765123156',
+                            name: '1 gram'
+                        }
+                    ]
                 },
                 {
                     id: 4,
@@ -422,7 +443,14 @@ export const getProductData = ():Promise<Array<ProductType>> => {
                         },
                     ],
                     thumbnailUrl: 'https://fyta.group/assets/components/phpthumbof/cache/f85-1024x1024-icecreamcake-top-kopie.9d3f60e6cb2744deb922f8634e005503.webP',
-                    type: 'weed'
+                    type: 'weed',
+                    variants: [
+                        {
+                            id: 1,
+                            ean: '984765123156',
+                            name: '1 gram'
+                        }
+                    ]
                 },
                 {
                     id: 5,
@@ -518,7 +546,14 @@ export const getProductData = ():Promise<Array<ProductType>> => {
                         },
                     ],
                     thumbnailUrl: 'https://fyta.group/assets/components/phpthumbof/cache/f49-mimosa-1024x1024-2-min.9d3f60e6cb2744deb922f8634e005503.webP',
-                    type: 'weed'
+                    type: 'weed',
+                    variants: [
+                        {
+                            id: 1,
+                            ean: '984765123156',
+                            name: '1 gram'
+                        }
+                    ]
                 }
             ]);
         }, 1000);

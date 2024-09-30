@@ -16,5 +16,7 @@ export type ShopType = {
     distance: number;
 };
 
-
-
+export type LocationObject = {
+    latitude: number,
+    longitude: number,
+}

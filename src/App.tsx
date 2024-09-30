@@ -9,14 +9,14 @@ import PageHome from './Home';
 import PageMap from './Map';
 import PageSearch from './Search';
 import PageProducts from './Products';
-import { ShopType } from './types/shop';
+import { LocationObject, ShopType } from './types/shop';
 import { GrowerType } from './types/grower';
 import { ProductType } from './types/product';
 
 function App() {
   const status = useStatus()
   const [currentPage, setCurrentPage] = useState("home")
-  const [location, setLocation] = useState<Object>({});
+  const [location, setLocation] = useState<LocationObject>({latitude: 0, longitude: 0});
 
 
   const counter: Worker = useMemo(
@@ -61,6 +61,13 @@ function App() {
     list: [],
     page: 1,
   });
+
+  useEffect(() => {
+    if (location.latitude !== 0 && location.longitude !== 0 ) {
+      localStorage.setItem('myLocationLat', location.latitude.toString())
+      localStorage.setItem('myLocationLng', location.longitude.toString())
+    }
+  }, [location])
 
   useEffect(() => {
     if (window.Worker) {
@@ -122,6 +129,11 @@ function App() {
   }, [getShop]);
 
   useEffect(() => {
+    let lat = localStorage.getItem('myLocationLat') ?? "0"
+    let lng = localStorage.getItem('myLocationLng') ?? "0"
+    location.latitude = parseFloat(lat)
+    location.longitude = parseFloat(lng)
+    
     if (window.Worker) {
       const request = {
         action: processList.getData,

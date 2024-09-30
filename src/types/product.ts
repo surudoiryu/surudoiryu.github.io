@@ -19,6 +19,7 @@ export type ProductType = {
     positiveEffects: ProductEffects[];
     dominantNegativeEffect: ProductEffects;
     negativeEffects: ProductEffects[];
+    variants: ProductVariants[];
 };
 
 export type ProductImages = {
@@ -45,4 +46,10 @@ export type ProductEffects = {
 export type ProductTastes = {
     id: number;
     name: string;
+}
+
+export type ProductVariants = {
+    id: number;
+    name: string;
+    ean: string;
 }
