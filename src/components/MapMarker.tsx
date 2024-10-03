@@ -5,6 +5,7 @@ interface MarkerProps {
     className?: string
     image?: string
     draggable: boolean
+    background?: boolean
     lat: number
     lng: number
     markerId: string
@@ -25,6 +26,7 @@ const Marker = ({
     markerId,
     onClick,
     draggable,
+    background,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onDrag,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -40,7 +42,7 @@ const Marker = ({
             // lat={lat}
             // lng={lng}
             onClick={(e) => (onClick ? onClick(e, { markerId, lat, lng }) : null)}
-            style={{ fontSize: 40, backgroundColor: "#ffffff", borderRadius: "50px", padding: "10px", objectFit: "scale-down" }}
+            style={{ fontSize: 40, cursor: (background) ? "pointer" : "grab", backgroundColor: (background) ? "#ffffff" : "transparent", borderRadius: (background) ? "50px" : "0px", padding: (background) ? "10px" : "0px", objectFit: "scale-down" }}
             alt={markerId}
             width={50}
             height={50}

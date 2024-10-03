@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Loader from './components/Loader';
 import GoogleMap, { LatLngBounds, MapContextProps } from 'google-maps-react-markers'
 import { LengthCountType, ListType } from "./types/data";
@@ -16,11 +17,14 @@ type Props = {
 
 export default function PageMap({ shopList, lengthCount, location, setLocation }: Props) {
     const mapRef = useRef<any>([])
+    const navigate = useNavigate();
+    
     const [mapReady, setMapReady] = useState<boolean>(false)
     const [mapBounds, setMapBounds] = useState<{ bounds: number[]; zoom: number }>({ bounds: [], zoom: 0 })
     const [usedCoordinates, setUsedCoordinates] = useState<number>(0)
     const [currCoordinates, setCurrCoordinates] = useState(shopList.list[usedCoordinates])
     const [highlighted, setHighlighted] = useState<string | null>(null)
+    const [selectedShop, setSelectedShop] = useState<ShopType>()
 
     const handleRetrieveUserLocation = () => {
         console.log(navigator.geolocation.getCurrentPosition(handleSuccess))
@@ -32,6 +36,14 @@ export default function PageMap({ shopList, lengthCount, location, setLocation }
             });
         } else {
             console.log("Geolocation not supported");
+        }
+    }
+
+    const handleOpenCannabisStore = () => {
+        if(selectedShop) {
+            navigate(`/cannabis-winkel/${selectedShop?.shortcode}`, { replace: true }); 
+        } else {
+            console.log('Something went wrong with selecting a Cannabis Store')
         }
     }
 
@@ -77,12 +89,12 @@ export default function PageMap({ shopList, lengthCount, location, setLocation }
     }
 
     const onMarkerClick = (e: any, { markerId, lat, lng }: { lat: number; lng: number; markerId: string }) => {
-        console.log(markerId)
+        console.log(e)
         setHighlighted(markerId)
         if(mapReady && mapRef.current) {
             mapRef.current.setCenter({ lat, lng })
             if(location) {
-                console.log(markerDistance(location, { latitude: lat, longitude: lng }).toFixed(2) + "km")
+                setSelectedShop(shopList.list.find(shop => shop.id === parseInt(markerId)))
             }
         }
     }
@@ -105,19 +117,17 @@ export default function PageMap({ shopList, lengthCount, location, setLocation }
 
     return (
         <section className="map-container">
-            {location ? <button onClick={handleRetrieveUserLocation}>Stel locatie in</button> : null}
-
             {!shopList.loading ?? (
                 <Loader size={40} display="block" />
             )}
-            {location?.latitude}{location?.longitude}
+            
             {shopList.list.length > 0 && (
                 <GoogleMap
                     apiKey={process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY ?? ''}
                     defaultCenter={{ lat: 52.08766, lng: 5.22577 }}
                     defaultZoom={10}
                     options={getMapOptions}
-                    mapMinHeight="100vh"
+                    mapMinHeight="calc(100vh - 60px)"
                     onGoogleApiLoaded={onGoogleApiLoaded}
                     onChange={(map) => console.log('Map moved', map)}
                 >
@@ -145,6 +155,7 @@ export default function PageMap({ shopList, lengthCount, location, setLocation }
                             markerId={id.toString()}
                             onClick={onMarkerClick} // you need to manage this prop on your Marker component!
                             draggable={false}
+                            background={true}
                         // onDragStart={(e, { latLng }) => {}}
                         // onDrag={(e, { latLng }) => {}}
                         // onDragEnd={(e, { latLng }) => {}}
@@ -153,12 +164,28 @@ export default function PageMap({ shopList, lengthCount, location, setLocation }
                 </GoogleMap>
             )}
 
-            {highlighted && (
+            {highlighted && parseInt(highlighted) > 0 && (
                 <div className={'highlighted'}>
-                    {highlighted}
-                    <button type="button" onClick={() => setHighlighted(null)}>
+                    <button style={{position: "absolute", top:0, right: 0}} type="button" onClick={() => setHighlighted(null)}>
                         X
                     </button>
+                    {location && selectedShop && (
+                        <>
+                            <img src={selectedShop.logo} alt={selectedShop.name} style={{maxHeight: 100, maxWidth: 100}}/><br />
+                            <strong>{selectedShop.name}</strong> ({selectedShop.rating}/5)<br />
+                            Open van: {selectedShop.openFrom} tot {selectedShop.openTill}<br />
+                            <button onClick={handleOpenCannabisStore}>Bekijk Cannabiswinkel</button><br />
+                            <br />
+                            {selectedShop.allowForeigns && (<>Buitenlanders toegestaan<br /></>)} 
+                            {selectedShop.drive && (<>Heeft Drive-Through<br /></>)} 
+                            {selectedShop.easyParking && (<>Parkeren is mogelijk<br /></>)} 
+                            {selectedShop.payByCard && (<>Pinnen kan<br /></>)} 
+                            {selectedShop.pickup && (<>Heeft pickup-point<br /></>)}
+                            {selectedShop.disabled && (<>Rolstoel toegankelijk<br /></>)}
+                            Afstand tot winkel: <strong>{markerDistance(location, { latitude: selectedShop?.lat, longitude: selectedShop.lng }).toFixed(2) + "km"}</strong><br/>
+                            <button onClick={handleRetrieveUserLocation}>Update locatie</button>
+                        </>
+                    )}
                 </div>
             )}
         </section>

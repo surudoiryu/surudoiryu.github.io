@@ -12,10 +12,13 @@ import PageProducts from './Products';
 import { LocationObject, ShopType } from './types/shop';
 import { GrowerType } from './types/grower';
 import { ProductType } from './types/product';
+import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import PageShop from './Shop';
+import Login from './Login';
+import Sign_Up from './Signup';
 
 function App() {
   const status = useStatus()
-  const [currentPage, setCurrentPage] = useState("home")
   const [location, setLocation] = useState<LocationObject>({latitude: 0, longitude: 0});
 
 
@@ -168,24 +171,47 @@ function App() {
 
   return (
     <div className="App">
-      {currentPage === "home" && (
-        <PageHome productList={productList} growerList={growerList} setCurrentPage={setCurrentPage} />
-      )}
+      <BrowserRouter>
+        <Routes>
+          <Route
+            path='/'
+            element={<PageHome productList={productList} growerList={growerList} />}
+          />
 
-      {currentPage === "shops" && (
-        <PageMap shopList={shopList} lengthCount={lengthCount} location={location} setLocation={setLocation} />
-      )}
+          <Route
+            path='/kaart'
+            element={<PageMap shopList={shopList} lengthCount={lengthCount} location={location} setLocation={setLocation} />}
+          />
 
-      {currentPage === "search" && (
-        <PageSearch />
-      )}
+          <Route
+            path='/zoeken'
+            element={<PageSearch />}
+          />
 
-      {currentPage === "cannabis" && (
-        <PageProducts />
-      )}
+          <Route
+            path='/cannabis'
+            element={<PageProducts />}
+          />
 
-      <br /><br /><br /><br />
-      <BottomNav currentPage={currentPage} setCurrentPage={setCurrentPage} />
+          <Route
+            path='/cannabis-winkel/*'
+            element={<PageShop shopList={shopList} growerList={growerList} productList={productList} />}
+          />
+
+          <Route
+            path='/login'
+            element={<Login />}
+          />
+
+          <Route
+            path='/aanmelden'
+            element={<Sign_Up />}
+          />
+        </Routes>
+        <BottomNav />
+      </BrowserRouter>
+
+      
     </div>
   );
 }

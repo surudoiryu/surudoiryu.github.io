@@ -11,6 +11,7 @@ export const getVariantData = (): Promise<Array<VariantType>> => {
             resolve([
                 {
                     id: 1,
+                    grower: 2,
                     title: "1 Gram",
                     ean: "9000000000483",
                     stock: [
@@ -20,7 +21,21 @@ export const getVariantData = (): Promise<Array<VariantType>> => {
                             name: "John & Co. Hellevoetsluis",
                             price: 12.50,
                             stock: 30,
-                        }
+                        },
+                        {
+                            id: 2,
+                            shop: 2,
+                            name: "Barbershop",
+                            price: 11.50,
+                            stock: 10,
+                        },
+                        {
+                            id: 3,
+                            shop: 3,
+                            name: "Quasi",
+                            price: 12.00,
+                            stock: 13,
+                        },
                     ]
                 },
             ]);

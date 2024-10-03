@@ -2,6 +2,7 @@ export type VariantType = {
     id: number;
     title: string;
     ean: string;
+    grower: number;
     stock: VariantStock[];
 };
 

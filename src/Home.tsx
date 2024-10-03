@@ -4,24 +4,26 @@ import { LengthCountType, ListType } from "./types/data";
 import ProductCard from "./components/ProductCard";
 import GrowerCard from "./components/GrowerCard";
 import logo from './logo.svg';
+import './Home.css';
 import { Button, Typography } from "@mui/material";
 import { GrowerType } from "./types/grower";
 import { ProductType } from "./types/product";
+import { useNavigate } from "react-router-dom";
 
 type Props = {
     productList: ListType;
     growerList: ListType;
-    setCurrentPage: (e: string) => void
 };
 
-export default function PageHome({ productList, growerList, setCurrentPage }: Props) {
-
+export default function PageHome({ productList, growerList }: Props) {
+    const navigate = useNavigate();
+    
     const handleOpenAllProducts = () => {
-        setCurrentPage("cannabis")
+        navigate('/cannabis', { replace: true }); 
     }
 
     return (
-        <section className="table-container">
+        <section className="home-container">
             <header className="App-header">
                 <img src={logo} className="App-logo" alt="logo" />
                 <p>

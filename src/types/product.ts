@@ -1,8 +1,8 @@
 export type ProductType = {
     id: number;
-    ean: number | string;
     title: string;
     brand: string;
+    grower: number;
     type: string;
     thumbnailUrl: string;
     description: string;

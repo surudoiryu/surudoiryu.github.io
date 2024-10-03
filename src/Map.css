@@ -11,7 +11,7 @@
 
 .highlighted {
     position: absolute;
-    bottom: 20px;
+    bottom: 60px;
     left: 0;
     right: 0;
     margin: auto;
@@ -25,7 +25,6 @@
     font-size: 1rem;
     text-align: center;
     /* animation */
-    transform: scale(0);
     animation: 400ms reveal forwards;
 }
 

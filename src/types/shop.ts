@@ -11,9 +11,14 @@ export type ShopType = {
     payByCard: boolean;
     easyParking: boolean;
     allowForeigns: boolean;
+    disabled: boolean;
     openFrom: string;
     openTill: string;
     distance: number;
+    shortcode: string;
+    description?: string;
+    growers?: Array<number>;
+    products?: Array<number>;
 };
 
 export type LocationObject = {

@@ -20,10 +20,12 @@ import VolunteerActivismOutlinedIcon from '@mui/icons-material/VolunteerActivism
 import CircleIcon from '@mui/icons-material/Circle';
 
 type Props = {
-    grower: GrowerType;
+    grower: GrowerType | undefined;
 };
 
 const GrowerCard = ({ grower }: Props) => {
+    if(grower === undefined) return (<></>)
+
     return (
         <Card sx={{ height: '100%' }}>
             <CardHeader
