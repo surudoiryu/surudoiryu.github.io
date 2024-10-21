@@ -5,6 +5,7 @@ export type GrowerType = {
     description: string;
     shortDescription: string;
     images: GrowerImages
+    shortcode?: string;
 };
 
 export type GrowerImages = {

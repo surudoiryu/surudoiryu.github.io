@@ -9,6 +9,8 @@ import { Button, Typography } from "@mui/material";
 import { GrowerType } from "./types/grower";
 import { ProductType } from "./types/product";
 import { useNavigate } from "react-router-dom";
+import ProductenPerMerk from "./components/BrandProducts";
+import Leveranciers from "./components/Growers";
 
 type Props = {
     productList: ListType;
@@ -26,9 +28,6 @@ export default function PageHome({ productList, growerList }: Props) {
         <section className="home-container">
             <header className="App-header">
                 <img src={logo} className="App-logo" alt="logo" />
-                <p>
-                    Binnenkort beschikbaar!
-                </p>
             </header>
             
             <section id="headerInfo" style={{ textAlign: 'left', margin: 30 }}>
@@ -49,22 +48,15 @@ export default function PageHome({ productList, growerList }: Props) {
                     <Loader size={40} display="block" />
                 )}
 
-                {productList.list.length > 0 && ( 
-                    <>
-                        <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 600, textAlign: "left", marginLeft: "30px" }}>
-                            Veel gezochte soortjes
-                        </Typography>
-                        <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
-                            {productList.list.map((prod: ProductType) => (
-                                <div style={{ minWidth: 350, height: 500, margin: 16 }}>
-                                    <ProductCard product={prod} />
-                                </div>
-                            ))}
-                        </div>
-                        <br />
-                        <Button style={{ width: "90%" }} color="success" variant="contained" onClick={handleOpenAllProducts}>Bekijk alles</Button>
-                    </>
-                )}
+                <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 600, textAlign: "left", marginLeft: "30px" }}>
+                    Veel gezochte soortjes
+                </Typography>
+                <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
+                    <ProductenPerMerk limit={10} />
+                </div>
+                <br />
+                <Button style={{ width: "90%" }} color="success" variant="contained" onClick={handleOpenAllProducts}>Bekijk alles</Button>
+
             </section>
 
             <br /><br /><br />
@@ -78,21 +70,9 @@ export default function PageHome({ productList, growerList }: Props) {
             </section>
 
             <section id="cannabisGrowers">
-                {!growerList.loading ?? (
-                    <Loader size={40} display="block" />
-                )}
-
-                {growerList.list && growerList.list.length > 0 && (
-                    <>
-                        <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
-                            {growerList.list.slice(0,10).map((grow: GrowerType) => (
-                                <div style={{ minWidth: 250, height: 280, margin: 16 }}>
-                                    <GrowerCard grower={grow} />
-                                </div>
-                            ))}
-                        </div>
-                    </>
-                )}
+                <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
+                    <Leveranciers />
+                </div>
             </section>
             
         </section>

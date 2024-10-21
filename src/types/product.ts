@@ -1,10 +1,15 @@
+import { DocumentReference } from "firebase/firestore";
+import { GrowerType } from "./grower";
+
 export type ProductType = {
     id: number;
+    shortcode: string;
     title: string;
-    brand: string;
+    brand: GrowerType;
     grower: number;
     type: string;
     thumbnailUrl: string;
+    shortDescription?: string;
     description: string;
     thcMin: number;
     thcMax: number;
@@ -13,12 +18,12 @@ export type ProductType = {
     rating: number;
     images: ProductImages;
     dominantTerpene: ProductTerpenes;
-    terpenes: ProductTerpenes[];
-    tastes: ProductTastes[];
+    terpenes?: DocumentReference[];
+    tastes?: DocumentReference[];
     dominantPositiveEffect: ProductEffects;
-    positiveEffects: ProductEffects[];
+    positiveEffects?: DocumentReference[];
     dominantNegativeEffect: ProductEffects;
-    negativeEffects: ProductEffects[];
+    negativeEffects?: DocumentReference[];
     variants: ProductVariants[];
 };
 

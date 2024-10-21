@@ -8,14 +8,18 @@ import BottomNav from './components/MobileMenu';
 import PageHome from './Home';
 import PageMap from './Map';
 import PageSearch from './Search';
-import PageProducts from './Products';
+import PageProduct from './Product';
+import PageProductsOverview from './ProductsOverview';
 import { LocationObject, ShopType } from './types/shop';
 import { GrowerType } from './types/grower';
 import { ProductType } from './types/product';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import PageShop from './Shop';
 import Login from './Login';
-import Sign_Up from './Signup';
+import Signup from './Signup';
+import PageGrower from './Grower';
+import PageGrowersOverview from './GrowersOverview';
+
 
 function App() {
   const status = useStatus()
@@ -190,12 +194,27 @@ function App() {
 
           <Route
             path='/cannabis'
-            element={<PageProducts />}
+            element={<PageProductsOverview />}
           />
 
           <Route
             path='/cannabis-winkel/*'
             element={<PageShop shopList={shopList} growerList={growerList} productList={productList} />}
+          />
+
+          <Route
+            path='/cannabis/*'
+            element={<PageProduct />}
+          />
+
+          <Route
+            path='/telers'
+            element={<PageGrowersOverview />}
+          />
+
+          <Route
+            path='/telers/*'
+            element={<PageGrower />}
           />
 
           <Route
@@ -205,7 +224,7 @@ function App() {
 
           <Route
             path='/aanmelden'
-            element={<Sign_Up />}
+            element={<Signup />}
           />
         </Routes>
         <BottomNav />

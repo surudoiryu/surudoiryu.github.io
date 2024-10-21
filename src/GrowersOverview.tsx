@@ -1,6 +1,6 @@
 import logo from './logo.svg';
 
-export default function PageProducts() {
+export default function PageGrowersOverview() {
     return (
         <header className="App-header">
             <img src={logo} className="App-logo" alt="logo" />

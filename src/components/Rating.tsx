@@ -54,10 +54,12 @@ type Props = {
 };
 
 const ProductRating = ({ rating }: Props) => {
+    console.log(Math.round(rating))
     return (
         <StyledRating
             name="highlight-selected-only"
-            defaultValue={5}
+            defaultValue={Math.round(rating)}
+            value={Math.round(rating)}
             getLabelText={(value: number) => customIcons[value].label}
             IconContainerComponent={IconContainer}
             readOnly

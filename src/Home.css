@@ -1,3 +1,7 @@
 .home-container {
     margin-bottom: 60px;
 }
+
+.App-header {
+    min-height: auto;
+}
