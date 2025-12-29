@@ -1,11 +1,6 @@
-import { ProductType } from "./product";
-import { ShopType } from "./shop";
-import { GrowerType } from "./grower";
-import { VariantType } from "./variant";
-
-export type ListType = {
+export type ListType<T> = {
     loading: boolean;
-    list: unknown & Array<ProductType & ShopType & GrowerType & VariantType>;
+    list: T[];
     page: number;
 };
 

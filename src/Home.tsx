@@ -1,4 +1,5 @@
 import React from "react";
+import { Grower } from "./interfaces/grower";
 import Loader from './components/Loader';
 import { LengthCountType, ListType } from "./types/data";
 import ProductCard from "./components/ProductCard";
@@ -13,8 +14,8 @@ import ProductenPerMerk from "./components/BrandProducts";
 import Leveranciers from "./components/Growers";
 
 type Props = {
-    productList: ListType;
-    growerList: ListType;
+    productList: ListType<ProductType>;
+    growerList: ListType<Grower>;
 };
 
 export default function PageHome({ productList, growerList }: Props) {

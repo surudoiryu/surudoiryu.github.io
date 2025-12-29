@@ -20,10 +20,11 @@ import ProductRating from "./Rating";
 import VolunteerActivismOutlinedIcon from '@mui/icons-material/VolunteerActivismOutlined';
 import ThumbDownOffAltIcon from '@mui/icons-material/ThumbDownOffAlt';
 import CircleIcon from '@mui/icons-material/Circle';
-import { GrowerType } from "../types/grower";
+import { Grower } from "../interfaces/grower";
+import { Product } from "../interfaces/product";
 
 type Props = {
-    product: ProductType;
+    product: Product;
 };
 
 const ProductCard = ({ product }: Props) => {
@@ -32,7 +33,7 @@ const ProductCard = ({ product }: Props) => {
     //const brand: GrowerType = product.brand as GrowerType
 
 
-    const openProductPage = (product: ProductType) => {
+    const openProductPage = (product: Product) => {
         if (product) {
             navigate(`/cannabis/${product.shortcode}`, { replace: true });
         } else {

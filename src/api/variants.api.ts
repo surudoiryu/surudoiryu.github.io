@@ -58,7 +58,7 @@ self.onmessage = (e: MessageEvent<string>) => {
                 loading: false,
                 list: variants,
                 page: data.thePageNumber,
-            } as ListType;
+            };
 
             console.log(response)
             self.postMessage(JSON.stringify(response))

@@ -1,16 +1,18 @@
 /* eslint-disable no-restricted-globals */
 import { GetDataType, listPageSize, ListType } from "../types/data";
 import { processList } from "../longProcesses/enums";
-import { GrowerType } from "../types/grower";
+import { Grower } from "../interfaces/grower";
 
-export const getGrowerData = (): Promise<Array<GrowerType>> => {
+export interface GrowerListType extends ListType<Grower> {}
+
+export const getGrowerData = (): Promise<Array<Grower>> => {
     console.log("start grower fetching")
     return new Promise((resolve) => {
         setTimeout(() => {
-            console.log("done fetching")
+            console.log("done fetching")/*
             resolve([
                 {
-                    id: 1,
+                    id: "1",
                     title: "CanAdelaar",
                     description: "",
                     shortDescription: "Sinds 2018 bezig met het vormgeven van de cannabisindustrie, van zaadje tot verkoop.",
@@ -18,7 +20,7 @@ export const getGrowerData = (): Promise<Array<GrowerType>> => {
                     thumbnailUrl: 'https://static.wixstatic.com/media/c31414_bca938ac9b474cba9677a65330c4a6d8~mv2.png/v1/fill/w_224,h_48,al_c,q_85,usm_0.66_1.00_0.01,enc_auto/Canadelaar_logo-02.png',
                 },
                 {
-                    id: 2,
+                    id: "2",
                     title: "Fyta",
                     description: "Al sinds 2017 is FYTA een van de Nederlandse pioniers in de legale cannabisteelt. Cannabis is niet eng en schimmig. Wel is zij een van de oudste geneeskrachtige planten ter wereld. Haar geneeskrachtige en psychoactieve eigenschappen zorgen ervoor dat zij inzetbaar is voor behandelen van een breed scala aan de meest uiteenlopende aandoeningen, maar is daarnaast ook uitermate geschikt om op een verantwoorde en vooral ontspannende manier gewoon te genieten.",
                     shortDescription: "Nederlandse pionier in de legale cannabisteelt",
@@ -26,7 +28,7 @@ export const getGrowerData = (): Promise<Array<GrowerType>> => {
                     thumbnailUrl: 'https://fyta.group/uploads/home/logo-fyta.png',
                 },
                 {
-                    id: 3,
+                    id: "3",
                     title: "Aardachtig",
                     description: "",
                     shortDescription: "Bij Aardachtig begint de reis met een zorgvuldig gekozen zaadje. Een reis met veel zorg, toewijding en expertise.",
@@ -34,7 +36,7 @@ export const getGrowerData = (): Promise<Array<GrowerType>> => {
                     thumbnailUrl: 'https://www.aardachtig.nl/wp-content/uploads/2022/02/Aardachtig-Logokopie11.png',
                 },
                 {
-                    id: 4,
+                    id: "4",
                     title: "Hollandse Hoogtes",
                     description: "Met ruim 40 jaar ervaring in de Vaderlandse coffeeshopcultuur zijn we geen groentje. Onze producten zijn stuk voor stuk van de hoogste kwaliteit. Ze worden uit de beste genetica gekweekt onder absoluut perfecte omstandigheden. Beter dan wat ooit in Nederland is gedaan. Daarmee leveren we een grote positieve bijdrage aan de hele industrie.",
                     shortDescription: "Onze producten zijn stuk voor stuk van de hoogste kwaliteit.",
@@ -42,15 +44,15 @@ export const getGrowerData = (): Promise<Array<GrowerType>> => {
                     thumbnailUrl: 'https://www.hollandsehoogtes.nl/wp-content/uploads/2023/07/HollandseHoogtes-225x54.png',
                 },
                 {
-                    id: 5,
-                    title: "Linsboer B.V.",
-                    description: "",
-                    shortDescription: "linds",
-                    images: { overview: '', close: '', mood: '', logo: 'https://linsboer.nl/images/linsboer-logo.svg' },
-                    thumbnailUrl: 'https://linsboer.nl/images/linsboer-logo.svg',
+                    id: "5",
+                    title: "Q-Farms.",
+                    description: "Q-Farms is een cannabisbedrijf dat zich richt op het kweken van hoogwaardige cannabisplanten. Het bedrijf heeft een team van ervaren kwekers en wetenschappers die zich inzetten voor het ontwikkelen van de beste cannabisgenetica en het optimaliseren van de teeltprocessen.",
+                    shortDescription: "qfarms is een cannabisbedrijf dat zich richt op het kweken van hoogwaardige cannabisplanten.",
+                    images: { overview: '', close: '', mood: '', logo: 'https://qfarms.nl/wp-content/uploads/2023/03/qfarms-logo.png' },
+                    thumbnailUrl: 'https://qfarms.nl/wp-content/uploads/2023/03/qfarms-logo.png',
                 },
                 {
-                    id: 8,
+                    id: "8",
                     title: "Holigram",
                     description: "",
                     shortDescription: "Het Holigram team gaat voor ‘clean cultivation, wild flavors’.",
@@ -58,14 +60,14 @@ export const getGrowerData = (): Promise<Array<GrowerType>> => {
                     thumbnailUrl: 'https://i0.wp.com/holigram.nl/wp-content/uploads/2023/03/holigram-logo-rgb-website-1.png',
                 },
                 {
-                    id: 9,
+                    id: "9",
                     title: "Leli Holland",
                     description: "",
                     shortDescription: "We streven ernaar om onze klanten met volle teugen te genieten van onze kwaliteits producten.",
                     images: { overview: '', close: '', mood: '', logo: 'https://leliholland.nl/wp-content/themes/leliholland/build/img/logo-animated.svg' },
                     thumbnailUrl: 'https://leliholland.nl/wp-content/themes/leliholland/build/img/logo-animated.svg',
                 }
-            ]);
+            ]);*/
         }, 1000);
     });
 };
@@ -81,11 +83,11 @@ self.onmessage = (e: MessageEvent<string>) => {
         getGrowerData().then((list) => {
             return list.filter((item, index) => index < listPageSize)
         }).then((growers) => {
-            const response = {
+            const response: GrowerListType = {
                 loading: false,
                 list: growers,
                 page: data.thePageNumber,
-            } as ListType;
+            };
 
             console.log(response)
             self.postMessage(JSON.stringify(response))

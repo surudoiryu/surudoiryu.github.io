@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { GrowerType } from "../types/grower";
+import { Grower } from "../interfaces/grower";
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardHeader from '@mui/material/CardHeader';
@@ -8,14 +8,14 @@ import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
 
 type Props = {
-    grower: GrowerType | undefined;
+    grower: Grower | undefined;
 };
 
 const GrowerCard = ({ grower }: Props) => {
     const navigate = useNavigate();
     if(grower === undefined) return (<></>)
 
-    const openGrowerPage = (grower: GrowerType) => {
+    const openGrowerPage = (grower: Grower) => {
         if (grower) {
             navigate(`/telers/${grower.shortcode}`, { replace: true });
         } else {

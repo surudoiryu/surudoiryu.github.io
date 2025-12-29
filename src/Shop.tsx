@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from "react";
 import Loader from './components/Loader';
+import { Grower } from "./interfaces/grower";
 import { LengthCountType, ListType } from "./types/data";
 import ProductCard from "./components/ProductCard";
 import GrowerCard from "./components/GrowerCard";
 import logo from './logo.svg';
 import './Shop.css';
 import { Button, Typography } from "@mui/material";
-import { GrowerType } from "./types/grower";
 import { ProductType } from "./types/product";
 import { ShopType } from "./types/shop";
 import { useLocation, useNavigate } from "react-router-dom";
 
 type Props = {
-    shopList: ListType;
-    growerList: ListType;
-    productList: ListType;
+    shopList: ListType<ShopType>;
+    growerList: ListType<Grower>;
+    productList: ListType<ProductType>;
 };
 
 export default function PageShop({ shopList, growerList, productList }: Props) {
@@ -23,7 +23,7 @@ export default function PageShop({ shopList, growerList, productList }: Props) {
     const shopcode = location.pathname.split("/")[2];
 
     const [selectedShop, setSelectedShop] = useState<ShopType>()
-    const [filteredGrowers, setFilteredGrowers] = useState<Array<number>>()
+    const [filteredGrowers, setFilteredGrowers] = useState<Array<string>>()
 
     
     useEffect(() => {
@@ -33,9 +33,10 @@ export default function PageShop({ shopList, growerList, productList }: Props) {
     }, [shopList])
 
     useEffect(() => {
-        const growers = productList.list.map((e) => e.grower).filter((val, id, array) => array.indexOf(val) === id)
-        console.log(growers)
-        setFilteredGrowers(growers)
+        const growers = productList.list
+            .map((e) => e.grower.toString()) // Zorg ervoor dat grower-IDs als strings worden opgeslagen
+            .filter((val, id, array) => array.indexOf(val) === id);
+        setFilteredGrowers(growers);
     }, [productList])
 
     return (
@@ -88,11 +89,13 @@ export default function PageShop({ shopList, growerList, productList }: Props) {
                 {growerList.list && growerList.list.length > 0 && (
                     <>
                         <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
-                            {growerList.list.map((grow: GrowerType) => filteredGrowers && filteredGrowers.includes(grow.id) ? (
-                                <div style={{ minWidth: 250, height: 280, margin: 16 }}>
+                        {growerList.list.map((grow: Grower) =>
+                            filteredGrowers?.includes(grow.id) ? (
+                                <div key={grow.id} style={{ minWidth: 250, height: 280, margin: 16 }}>
                                     <GrowerCard grower={grow} />
                                 </div>
-                            ):(<></>))}
+                            ) : null
+                        )}
                         </div>
                     </>
                 )}

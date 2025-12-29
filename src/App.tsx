@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Grower } from "./interfaces/grower";
 import { processList } from "./longProcesses/enums";
 import { useStatus } from "./registrationStatus";
 import './App.css';
@@ -51,19 +52,19 @@ function App() {
     value: 0,
   });
 
-  const [productList, setProductList] = useState<ListType>({
+  const [productList, setProductList] = useState<ListType<ProductType>>({
     loading: true,
     list: [],
     page: 1,
   });
 
-  const [growerList, setGrowerList] = useState<ListType>({
+  const [growerList, setGrowerList] = useState<ListType<Grower>>({
     loading: true,
     list: [],
     page: 1,
   });
 
-  const [shopList, setShopList] = useState<ListType>({
+  const [shopList, setShopList] = useState<ListType<ShopType>>({
     loading: true,
     list: [],
     page: 1,
@@ -93,7 +94,7 @@ function App() {
   useEffect(() => {
     if (window.Worker) {
       getData.onmessage = (e: MessageEvent<string>) => {
-        const response = JSON.parse(e.data) as unknown as ListType;
+        const response = JSON.parse(e.data) as unknown as ListType<ProductType>;
         console.log(response)
         setProductList((prev) => ({
           ...prev,
@@ -108,7 +109,7 @@ function App() {
   useEffect(() => {
     if (window.Worker) {
       getGrower.onmessage = (e: MessageEvent<string>) => {
-        const response = JSON.parse(e.data) as unknown as ListType;
+        const response = JSON.parse(e.data) as unknown as ListType<Grower>;
         console.log(response)
         setGrowerList((prev) => ({
           ...prev,
@@ -123,7 +124,7 @@ function App() {
   useEffect(() => {
     if (window.Worker) {
       getShop.onmessage = (e: MessageEvent<string>) => {
-        const response = JSON.parse(e.data) as unknown as ListType;
+        const response = JSON.parse(e.data) as unknown as ListType<ShopType>;
         console.log(response)
         setShopList((prev) => ({
           ...prev,

@@ -9,7 +9,7 @@ import './Map.css';
 import Marker from "./components/MapMarker";
 
 type Props = {
-    shopList: ListType;
+    shopList: ListType<ShopType>;
     lengthCount: LengthCountType;
     location: LocationObject | null;
     setLocation: (location: LocationObject) => void;

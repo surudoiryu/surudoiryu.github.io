@@ -1,47 +1,35 @@
 import React, { useEffect, useState } from 'react';
-import { DocumentReference, collection, getDocs, doc, query, where, onSnapshot, getDoc } from "firebase/firestore";
+import { Grower } from "../interfaces/grower";
+import { onSnapshot } from "firebase/firestore";
 import { brandCollectionRef } from '../firebaseCollections';
-import { GrowerType } from '../types/grower';
 import GrowerCard from './GrowerCard';
 
 interface brandProp {
     brandId?: string;
 }
 
-interface Grower {
-    id: string,
-    data: GrowerType
-}
-
 const Leveranciers = ({ brandId }: brandProp) => {
-    const [leveranciers, setLeveranciers] = useState<any>([])
+    const [leveranciers, setLeveranciers] = useState<Grower[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(brandCollectionRef, async (snapshot) => {
-            const Growers = await Promise.all(snapshot.docs.map(async (doc) => {
-                const growerData = doc.data() as GrowerType
-
+            const growers = snapshot.docs.map(doc => {
+                const growerData = doc.data() as Grower;
                 if (!brandId || growerData?.title === brandId) {
-                    return {
-                        id: doc.id,
-                        data: {
-                            ...growerData
-                        }
-                    }
+                    return { ...growerData, id: doc.id };
                 }
-
-                return null
-            }))
-            setLoading(false)
-            setLeveranciers(Growers)
+                return null;
+            }).filter(Boolean) as Grower[];
+            setLoading(false);
+            setLeveranciers(growers);
         })
 
         return () => {
             unsubscribe()
         }
-    }, []);
+    }, [brandId]);
 
     if (loading) {
         return <div>Loading...</div>;
@@ -53,15 +41,11 @@ const Leveranciers = ({ brandId }: brandProp) => {
 
     return (
         <>
-            {leveranciers.map((leverancier: Grower) => {
-                if (leverancier && leverancier.data) return (
-                    <div key={`growercontainer-${leverancier.id}`} style={{ minWidth: 250, height: 280, margin: 16 }}>
-                        <GrowerCard key={`growercard-${leverancier.id}`} grower={leverancier.data} />
-                    </div>
-                )
-                return ""
-            }
-            )}
+            {leveranciers.map((leverancier) => (
+                <div key={`growercontainer-${leverancier.id}`} style={{ minWidth: 250, height: 280, margin: 16 }}>
+                    <GrowerCard key={`growercard-${leverancier.id}`} grower={leverancier} />
+                </div>
+            ))}
         </>
     );
 }
