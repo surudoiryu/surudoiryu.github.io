@@ -8,19 +8,14 @@ import CardHeader from '@mui/material/CardHeader';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
 import ShareIcon from '@mui/icons-material/Share';
-import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import Chip from '@mui/material/Chip';
-import FaceIcon from '@mui/icons-material/Face';
 import BoltIcon from '@mui/icons-material/Bolt';
-import SelfImprovementIcon from '@mui/icons-material/SelfImprovement';
-import WeekendIcon from '@mui/icons-material/Weekend';
 import ProductRating from "./Rating";
 
 import VolunteerActivismOutlinedIcon from '@mui/icons-material/VolunteerActivismOutlined';
 import ThumbDownOffAltIcon from '@mui/icons-material/ThumbDownOffAlt';
 import CircleIcon from '@mui/icons-material/Circle';
-import { GrowerType } from "../types/grower";
 
 type Props = {
     product: ProductType;

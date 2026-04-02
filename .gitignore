@@ -27,3 +27,7 @@ yarn-error.log*
 *.psd
 WeedInfoLogo.svg
 WeedInfoLogoOnly.svg
+
+.env
+.env.worker
+scripts/service-account.json

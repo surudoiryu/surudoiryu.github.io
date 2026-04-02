@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { DocumentReference, collection, getDocs, doc, query, where, onSnapshot, getDoc } from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 import { brandCollectionRef } from './firebaseCollections';
 import './Grower.css';
 import { IconButton,  Typography } from "@mui/material";
@@ -14,9 +14,8 @@ export default function PageGrower() {
     const location = useLocation();
     const growercode = location.pathname.split("/")[2];
 
-    const [grower, setGrower] = useState<any>([])
+    const [grower, setGrower] = useState<{ id: string; data: GrowerType } | null>(null)
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(brandCollectionRef, async (snapshot) => {
@@ -37,14 +36,10 @@ export default function PageGrower() {
         return () => {
             unsubscribe()
         }
-    }, [])
+    }, [growercode])
 
     if (loading) {
         return <div>Loading...</div>;
-    }
-
-    if (error) {
-        return <div>Error loading grower data: {error}</div>;
     }
 
     const openGrowerOverviewPage = () => {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { DocumentReference, collection, getDocs, doc, query, where, onSnapshot, getDoc } from "firebase/firestore";
+import { onSnapshot } from "firebase/firestore";
 import { brandCollectionRef } from '../firebaseCollections';
 import { GrowerType } from '../types/grower';
 import GrowerCard from './GrowerCard';
@@ -14,9 +14,8 @@ interface Grower {
 }
 
 const Leveranciers = ({ brandId }: brandProp) => {
-    const [leveranciers, setLeveranciers] = useState<any>([])
+    const [leveranciers, setLeveranciers] = useState<Grower[]>([])
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(brandCollectionRef, async (snapshot) => {
@@ -35,20 +34,16 @@ const Leveranciers = ({ brandId }: brandProp) => {
                 return null
             }))
             setLoading(false)
-            setLeveranciers(Growers)
+            setLeveranciers(Growers.filter((item): item is Grower => Boolean(item)))
         })
 
         return () => {
             unsubscribe()
         }
-    }, []);
+    }, [brandId]);
 
     if (loading) {
         return <div>Loading...</div>;
-    }
-
-    if (error) {
-        return <div>Error loading grower data: {error}</div>;
     }
 
     return (

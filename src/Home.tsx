@@ -1,16 +1,11 @@
-import React from "react";
-import Loader from './components/Loader';
-import { LengthCountType, ListType } from "./types/data";
-import ProductCard from "./components/ProductCard";
-import GrowerCard from "./components/GrowerCard";
+import { ListType } from "./types/data";
 import logo from './logo.svg';
 import './Home.css';
 import { Button, Typography } from "@mui/material";
-import { GrowerType } from "./types/grower";
-import { ProductType } from "./types/product";
 import { useNavigate } from "react-router-dom";
 import ProductenPerMerk from "./components/BrandProducts";
 import Leveranciers from "./components/Growers";
+import Loader from "./components/Loader";
 
 type Props = {
     productList: ListType;
@@ -44,7 +39,7 @@ export default function PageHome({ productList, growerList }: Props) {
             </section>
 
             <section id="cannabisStrains">
-                {!productList.loading ?? (
+                {productList.loading && (
                     <Loader size={40} display="block" />
                 )}
 

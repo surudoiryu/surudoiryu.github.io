@@ -6,6 +6,7 @@ import SentimentDissatisfiedIcon from '@mui/icons-material/SentimentDissatisfied
 import SentimentSatisfiedIcon from '@mui/icons-material/SentimentSatisfied';
 import SentimentSatisfiedAltIcon from '@mui/icons-material/SentimentSatisfiedAltOutlined';
 import SentimentVerySatisfiedIcon from '@mui/icons-material/SentimentVerySatisfied';
+import SentimentNeutralIcon from '@mui/icons-material/SentimentNeutral';
 
 const StyledRating = styled(Rating)(({ theme }) => ({
     '& .MuiRating-iconEmpty .MuiSvgIcon-root': {
@@ -36,9 +37,19 @@ const customIcons: RatingProps = {
     }
 };
 
+const fallbackIcon: RatingProp = {
+    icon: <SentimentNeutralIcon color="disabled" />,
+    label: 'No Rating',
+};
+
+const normalizeRating = (value: number): number => {
+    const rounded = Math.round(Number(value) || 0);
+    return Math.min(5, Math.max(0, rounded));
+};
+
 const IconContainer = (props: IconContainerProps) => {
     const { value, ...other } = props
-    return <span {...other}>{customIcons[value].icon}</span>
+    return <span {...other}>{(customIcons[value] ?? fallbackIcon).icon}</span>
 }
 type RatingProps = {
     [key: number]: RatingProp
@@ -54,13 +65,13 @@ type Props = {
 };
 
 const ProductRating = ({ rating }: Props) => {
-    console.log(Math.round(rating))
+    const normalized = normalizeRating(rating);
     return (
         <StyledRating
             name="highlight-selected-only"
-            defaultValue={Math.round(rating)}
-            value={Math.round(rating)}
-            getLabelText={(value: number) => customIcons[value].label}
+            defaultValue={normalized}
+            value={normalized}
+            getLabelText={(value: number) => (customIcons[value] ?? fallbackIcon).label}
             IconContainerComponent={IconContainer}
             readOnly
             highlightSelectedOnly

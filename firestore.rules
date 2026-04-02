@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Catalog data: alleen lezen vanuit client, schrijven via worker/service account.
+    match /Producten/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /Brands/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /Shops/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /SyncStatus/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // User profile: ingelogde gebruikers kunnen lezen, alleen eigen profiel schrijven.
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Reviews: direct client write toegestaan voor ingelogde user (eigen review).
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+    }
+  }
+}

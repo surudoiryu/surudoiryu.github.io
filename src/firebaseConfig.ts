@@ -1,6 +1,7 @@
 import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+import { getAnalytics } from "firebase/analytics";
+import { enableIndexedDbPersistence, getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
     apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -12,13 +13,15 @@ const firebaseConfig = {
     appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
-const app = initializeApp(firebaseConfig);
-const firestoreApp = getApps().length
-    ? getApp()
-    : initializeApp(firebaseConfig);
-const googleAuthProvider = new GoogleAuthProvider();
-const auth = getAuth(firestoreApp);
-
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+const auth = getAuth(app);
 const db = getFirestore(app);
+const analytics = typeof window !== "undefined" ? getAnalytics(app) : null;
 
-export { auth, googleAuthProvider, db };
+enableIndexedDbPersistence(db).catch((error) => {
+    if (error.code !== "failed-precondition" && error.code !== "unimplemented") {
+        console.error("Kon Firestore offline caching niet activeren", error);
+    }
+});
+
+export { auth, db, analytics };
