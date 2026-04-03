@@ -19,6 +19,7 @@ export type ShopType = {
     description?: string;
     growers?: Array<number>;
     products?: Array<number>;
+    isApproved?: boolean;
 };
 
 export type LocationObject = {

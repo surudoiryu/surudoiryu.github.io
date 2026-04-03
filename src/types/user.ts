@@ -10,6 +10,8 @@ export type UserProfile = {
     bio?: string;
     pushEnabled: boolean;
     likedProducts: string[];
+    likedGrowers?: string[];
+    likedShops?: string[];
     updatedAt?: Timestamp;
     createdAt?: Timestamp;
 };

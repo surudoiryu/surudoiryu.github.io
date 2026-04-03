@@ -23,9 +23,21 @@ import CircleIcon from '@mui/icons-material/Circle';
 
 type Props = {
     product: ProductType;
+    reviewCount?: number;
 };
 
-const ProductCard = ({ product }: Props) => {
+function getStrainLabel(type: string | undefined): string {
+    const normalized = String(type || "").toLowerCase();
+    if (normalized.includes("sativa")) return "Sativa Dominant";
+    if (normalized.includes("indica")) return "Indica Dominant";
+    return "Hybrid";
+}
+
+function getCbdLabel(cbdValue: number): string {
+    return cbdValue < 1 ? "< 1%" : `${cbdValue}%`;
+}
+
+const ProductCard = ({ product, reviewCount }: Props) => {
     const navigate = useNavigate();
     const rawImageSource =
         product?.thumbnailUrl ||
@@ -36,17 +48,18 @@ const ProductCard = ({ product }: Props) => {
     const thumbnailUrl = useSignedMediaUrl(rawImageSource);
     const imageToShow = thumbnailUrl || rawImageSource || "/android-chrome-192x192.png";
     const { user, isProductLiked, toggleLike } = useAuth();
-    if (product === undefined) return (<></>)
-    //const brand: GrowerType = product.brand as GrowerType
+    const strainLabel = getStrainLabel(product?.type);
+    const cbdLabel = getCbdLabel(Number(product?.cbdMax ?? 0));
 
+    if (product === undefined) return (<></>);
 
-    const openProductPage = (product: ProductType) => {
-        if (product) {
-            navigate(`/cannabis/${product.shortcode}`, { replace: true });
+    const openProductPage = (selectedProduct: ProductType) => {
+        if (selectedProduct) {
+            navigate(`/cannabis/${selectedProduct.shortcode}`);
         } else {
-            console.log('Something went wrong with selecting a Cannabis Store')
+            console.log('Something went wrong with selecting a Cannabis Store');
         }
-    }
+    };
 
     const handleShare = async (event: React.MouseEvent<HTMLButtonElement>) => {
         event.stopPropagation();
@@ -65,7 +78,7 @@ const ProductCard = ({ product }: Props) => {
         event.stopPropagation();
 
         if (!user) {
-            navigate("/login", { replace: true });
+            navigate("/login");
             return;
         }
 
@@ -77,7 +90,7 @@ const ProductCard = ({ product }: Props) => {
     };
 
     return (
-        <Card sx={{height: '100%'}}>
+        <Card sx={{ height: '100%' }}>
             <CardHeader
                 sx={{ textAlign: 'left' }}
                 action={
@@ -90,7 +103,16 @@ const ProductCard = ({ product }: Props) => {
                         </IconButton>
                     </>
                 }
-                title={<ProductRating key={`productrating-${product.id}`} rating={product.rating} />}
+                title={
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                        <ProductRating key={`productrating-${product.id}`} rating={product.rating} />
+                        {typeof reviewCount === "number" && (
+                            <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                                ({reviewCount})
+                            </Typography>
+                        )}
+                    </span>
+                }
             />
             <CardMedia
                 component="img"
@@ -101,9 +123,9 @@ const ProductCard = ({ product }: Props) => {
                 onClick={() => openProductPage(product)}
             />
             <CardContent sx={{ textAlign: 'left' }} onClick={() => openProductPage(product)}>
-                <Chip size="small" icon={<BoltIcon />} label={product.dominantTerpene.energic > 50 ? "Sativa Dominant" : (product.dominantTerpene.energic === product.dominantTerpene.relaxing ) ? "Hybrid" : "Indica Dominant"} variant="outlined" />
-                <span style={{ float: "right", display: "inline-block" }} ><CircleIcon sx={{position: "relative", top: "5px"}} fontSize="small" htmlColor={product.dominantTerpene.color} /> {product.dominantTerpene.name}</span>
-                
+                <Chip size="small" icon={<BoltIcon />} label={strainLabel} variant="outlined" />
+                <span style={{ float: "right", display: "inline-block" }} ><CircleIcon sx={{ position: "relative", top: "5px" }} fontSize="small" htmlColor={product.dominantTerpene.color} /> {product.dominantTerpene.name}</span>
+
                 <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                     {product.title}
                 </Typography>
@@ -114,7 +136,7 @@ const ProductCard = ({ product }: Props) => {
                 <br />
                 <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                     THC {product.thcMin}% - {product.thcMax}%<br />
-                    CBD {product.cbdMin === 0 ? `< ${product.cbdMax}%` : `${product.cbdMin}% - ${product.cbdMax}%`}<br />
+                    CBD {cbdLabel}<br />
                     <br />
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>

@@ -47,6 +47,8 @@ type AuthContextValue = {
     login: (email: string, password: string) => Promise<void>;
     logout: () => Promise<void>;
     toggleLike: (productShortcode: string) => Promise<void>;
+    toggleGrowerLike: (growerShortcode: string) => Promise<void>;
+    toggleShopLike: (shopShortcode: string) => Promise<void>;
     saveReview: (input: ReviewInput) => Promise<void>;
     deleteReview: (productShortcode: string) => Promise<void>;
     setPushEnabled: (enabled: boolean) => Promise<void>;
@@ -58,6 +60,8 @@ type AuthContextValue = {
         bio?: string;
     }) => Promise<void>;
     isProductLiked: (productShortcode: string) => boolean;
+    isGrowerLiked: (growerShortcode: string) => boolean;
+    isShopLiked: (shopShortcode: string) => boolean;
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -74,6 +78,8 @@ const buildDefaultProfile = (currentUser: User): UserProfile => {
         bio: "",
         pushEnabled: false,
         likedProducts: [],
+        likedGrowers: [],
+        likedShops: [],
     };
 };
 
@@ -171,6 +177,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 bio: "",
                 pushEnabled: false,
                 likedProducts: [],
+                likedGrowers: [],
+                likedShops: [],
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
             });
@@ -255,6 +263,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
     };
 
+    const toggleGrowerLike = async (growerShortcode: string) => {
+        if (!user || !profile) {
+            throw new Error("Log in om telers te liken.");
+        }
+
+        const normalizedShortcode = growerShortcode?.trim();
+        if (!normalizedShortcode) {
+            throw new Error("Deze teler kan niet geliket worden omdat er geen shortcode beschikbaar is.");
+        }
+
+        if (!navigator.onLine) {
+            throw new Error("Likes bijwerken kan alleen wanneer je online bent.");
+        }
+
+        const userRef = doc(db, "Gebruikers", user.uid);
+        const currentLiked = Array.isArray(profile.likedGrowers) ? profile.likedGrowers : [];
+        const uniqueLiked = Array.from(new Set(currentLiked.filter(Boolean)));
+        const isLiked = uniqueLiked.includes(normalizedShortcode);
+
+        const nextLiked = isLiked
+            ? uniqueLiked.filter((item) => item !== normalizedShortcode)
+            : [...uniqueLiked, normalizedShortcode];
+
+        await setDoc(
+            userRef,
+            {
+                likedGrowers: nextLiked,
+                updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+        );
+    };
+
+    const toggleShopLike = async (shopShortcode: string) => {
+        if (!user || !profile) {
+            throw new Error("Log in om winkels te liken.");
+        }
+
+        const normalizedShortcode = shopShortcode?.trim();
+        if (!normalizedShortcode) {
+            throw new Error("Deze winkel kan niet geliket worden omdat er geen shortcode beschikbaar is.");
+        }
+
+        if (!navigator.onLine) {
+            throw new Error("Likes bijwerken kan alleen wanneer je online bent.");
+        }
+
+        const userRef = doc(db, "Gebruikers", user.uid);
+        const currentLiked = Array.isArray(profile.likedShops) ? profile.likedShops : [];
+        const uniqueLiked = Array.from(new Set(currentLiked.filter(Boolean)));
+        const isLiked = uniqueLiked.includes(normalizedShortcode);
+
+        const nextLiked = isLiked
+            ? uniqueLiked.filter((item) => item !== normalizedShortcode)
+            : [...uniqueLiked, normalizedShortcode];
+
+        await setDoc(
+            userRef,
+            {
+                likedShops: nextLiked,
+                updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+        );
+    };
+
     const deleteReview = async (productShortcode: string) => {
         if (!user) {
             throw new Error("Log in om reviews te verwijderen.");
@@ -326,6 +400,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const isProductLiked = (productShortcode: string) =>
         Boolean(profile?.likedProducts?.includes(productShortcode));
+    const isGrowerLiked = (growerShortcode: string) =>
+        Boolean(profile?.likedGrowers?.includes(growerShortcode));
+    const isShopLiked = (shopShortcode: string) =>
+        Boolean(profile?.likedShops?.includes(shopShortcode));
 
     const value = {
         user,
@@ -336,11 +414,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         logout,
         toggleLike,
+        toggleGrowerLike,
+        toggleShopLike,
         saveReview,
         deleteReview,
         setPushEnabled,
         updateProfileDetails,
         isProductLiked,
+        isGrowerLiked,
+        isShopLiked,
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

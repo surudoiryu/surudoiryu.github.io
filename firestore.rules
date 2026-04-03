@@ -59,6 +59,17 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Route statistieken (anonieme teller).
+    match /Stats/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /ViewStats/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // User profile: ingelogde gebruikers kunnen lezen, alleen eigen profiel schrijven.
     match /Gebruikers/{userId} {
       allow read: if isSignedIn();

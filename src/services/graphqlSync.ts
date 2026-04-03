@@ -222,6 +222,16 @@ function inferType(ratio?: string | null): string {
 
 function inferEnergic(ratio?: string | null): number {
     const normalized = (ratio ?? "").toLowerCase();
+    if (normalized.includes("sativa")) {
+        return 75;
+    }
+    if (normalized.includes("indica")) {
+        return 25;
+    }
+    if (normalized.includes("hybrid")) {
+        return 50;
+    }
+
     const match = normalized.match(/(\d+)\s*[:/-]\s*(\d+)/);
     if (!match) {
         return 50;
@@ -242,7 +252,9 @@ function mapProduct(
 ): SyncedProductDocument {
     const numericId = toNumericId(source.id, index + 1);
     const thc = source.cannabisInfo?.thc ?? 0;
-    const cbd = source.cannabisInfo?.cbd ?? 0;
+    const cbd = Math.max(0, source.cannabisInfo?.cbd ?? 0);
+    const thcMin = Math.max(0, thc - 5);
+    const thcMax = Math.max(thcMin, thc + 5);
     const energetic = inferEnergic(source.cannabisInfo?.sativaIndicaRatio);
     const relaxing = 100 - energetic;
     const dominantTerpeneName =
@@ -313,8 +325,8 @@ function mapProduct(
         thumbnailUrl: source.mainImageId ?? "",
         shortDescription: (source.description ?? "").slice(0, 180),
         description: source.description ?? "",
-        thcMin: thc,
-        thcMax: thc,
+        thcMin,
+        thcMax,
         cbdMin: cbd,
         cbdMax: cbd,
         rating: 0,
@@ -544,3 +556,9 @@ export async function syncGraphQlToFirebase(): Promise<void> {
         console.warn("SyncStatus kon niet geschreven worden.", error);
     }
 }
+
+
+
+
+
+

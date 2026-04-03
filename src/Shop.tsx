@@ -10,6 +10,30 @@ import { ProductType } from "./types/product";
 import { ShopType } from "./types/shop";
 import { ProductReview } from "./types/user";
 import "./Shop.css";
+import { incrementEntityView } from "./services/viewStats";
+
+function toProductReviewStats(reviews: ProductReview[]) {
+    const grouped: Record<string, { sum: number; count: number }> = {};
+    reviews.forEach((item) => {
+        if (!item.productShortcode) {
+            return;
+        }
+        if (!grouped[item.productShortcode]) {
+            grouped[item.productShortcode] = { sum: 0, count: 0 };
+        }
+        grouped[item.productShortcode].sum += Number(item.rating || 0);
+        grouped[item.productShortcode].count += 1;
+    });
+
+    const normalized: Record<string, { count: number; rating: number }> = {};
+    Object.entries(grouped).forEach(([shortcode, value]) => {
+        normalized[shortcode] = {
+            count: value.count,
+            rating: Math.min(5, Math.max(0, Math.ceil(value.sum / value.count))),
+        };
+    });
+    return normalized;
+}
 
 export default function PageShop() {
     const location = useLocation();
@@ -21,6 +45,12 @@ export default function PageShop() {
     const [reviews, setReviews] = useState<ProductReview[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        void incrementEntityView("shop", shopcode).catch((viewError) => {
+            console.warn("Winkel view kon niet opgeslagen worden.", viewError);
+        });
+    }, [shopcode]);
 
     useEffect(() => {
         const unsubs: Array<() => void> = [];
@@ -110,6 +140,7 @@ export default function PageShop() {
         const total = shopReviews.reduce((sum, item) => sum + item.rating, 0);
         return total / shopReviews.length;
     }, [shopReviews]);
+    const reviewStatsByProduct = useMemo(() => toProductReviewStats(reviews), [reviews]);
 
     if (loading) {
         return <section className="shop-container">Loading...</section>;
@@ -193,7 +224,13 @@ export default function PageShop() {
                 {shopProducts.length > 0 ? (
                     shopProducts.map((product) => (
                         <div key={`product-${product.id}`} style={{ minWidth: 350, height: 500, margin: 12 }}>
-                            <ProductCard product={product} />
+                            <ProductCard
+                                product={{
+                                    ...product,
+                                    rating: reviewStatsByProduct[product.shortcode]?.rating ?? product.rating,
+                                }}
+                                reviewCount={reviewStatsByProduct[product.shortcode]?.count ?? 0}
+                            />
                         </div>
                     ))
                 ) : (
@@ -226,3 +263,5 @@ export default function PageShop() {
         </section>
     );
 }
+
+

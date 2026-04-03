@@ -400,6 +400,10 @@ function inferType(ratio) {
 
 function inferEnergic(ratio) {
     const normalized = String(ratio || "").toLowerCase();
+    if (normalized.includes("sativa")) return 75;
+    if (normalized.includes("indica")) return 25;
+    if (normalized.includes("hybrid")) return 50;
+
     const match = normalized.match(/(\d+)\s*[:/-]\s*(\d+)/);
     if (!match) return 50;
     const left = Number.parseInt(match[1], 10);
@@ -657,6 +661,7 @@ function toGrowerDocument(source, fallbackName, fallbackNumericId) {
                 close: firstNonEmptyString(source?.closeImageUrl),
                 mood: firstNonEmptyString(source?.moodImageUrl),
             },
+            isApproved: Boolean(source?.isApproved),
         },
     };
 }
@@ -695,6 +700,7 @@ function toShopDocument(source, fallbackName, fallbackNumericId, seed) {
             growers: [],
             source: "graphql",
             syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+            isApproved: Boolean(source?.isApproved),
         },
     };
 }
@@ -774,6 +780,8 @@ function mapProduct(source, index, growersBySourceId, growersByName) {
     const numericId = toNumericId(source.id, index + 1);
     const thc = Number(source?.cannabisInfo?.thc || 0);
     const cbd = Math.max(0, Number(source?.cannabisInfo?.cbd || 0));
+    const thcMin = Math.max(0, thc - 5);
+    const thcMax = Math.max(thcMin, thc + 5);
     const energetic = inferEnergic(source?.cannabisInfo?.sativaIndicaRatio);
     const relaxing = 100 - energetic;
     const type = inferType(source?.cannabisInfo?.sativaIndicaRatio);
@@ -821,8 +829,8 @@ function mapProduct(source, index, growersBySourceId, growersByName) {
         thumbnailUrl: source.mainImageId || "",
         shortDescription: String(source.description || "").slice(0, 180),
         description: source.description || "",
-        thcMin: thc,
-        thcMax: thc,
+        thcMin,
+        thcMax,
         cbdMin: cbd,
         cbdMax: cbd,
         rating: 0,
@@ -1093,6 +1101,14 @@ run().catch(async (error) => {
     }
     process.exit(1);
 });
+
+
+
+
+
+
+
+
 
 
 

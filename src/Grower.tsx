@@ -10,6 +10,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ProductenPerMerk from "./components/BrandProducts";
 import { useSignedMediaUrl } from "./hooks/useSignedMediaUrl";
 import { shareLink } from "./services/share";
+import { incrementEntityView } from "./services/viewStats";
 
 export default function PageGrower() {
     const navigate = useNavigate();
@@ -19,6 +20,12 @@ export default function PageGrower() {
     const [grower, setGrower] = useState<{ id: string; data: GrowerType } | null>(null)
     const [loading, setLoading] = useState(true)
     const growerLogoUrl = useSignedMediaUrl(grower?.data?.images?.logo || grower?.data?.thumbnailUrl);
+
+    useEffect(() => {
+        void incrementEntityView("grower", growercode).catch((error) => {
+            console.warn("Teler view kon niet opgeslagen worden.", error);
+        });
+    }, [growercode]);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(brandCollectionRef, async (snapshot) => {
@@ -46,7 +53,7 @@ export default function PageGrower() {
     }
 
     const openGrowerOverviewPage = () => {
-        navigate(`/telers`, { replace: true });
+        navigate(`/telers`);
     }
 
     const handleShare = async () => {
@@ -100,3 +107,5 @@ export default function PageGrower() {
         </section>
     )
 }
+
+

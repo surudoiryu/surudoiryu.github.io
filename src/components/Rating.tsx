@@ -16,29 +16,35 @@ const StyledRating = styled(Rating)(({ theme }) => ({
 
 const customIcons: RatingProps = {
     1: {
-        icon: <SentimentVeryDissatisfiedIcon color="error" />,
+        icon: SentimentVeryDissatisfiedIcon,
+        color: "#d32f2f",
         label: 'Very Dissatisfied',
     },
     2: {
-        icon: <SentimentDissatisfiedIcon color="error" />,
+        icon: SentimentDissatisfiedIcon,
+        color: "#e53935",
         label: 'Dissatisfied',
     },
     3: {
-        icon: <SentimentSatisfiedIcon color="warning" />,
+        icon: SentimentSatisfiedIcon,
+        color: "#f57c00",
         label: 'Neutral',
     },
     4: {
-        icon: <SentimentSatisfiedAltIcon color="success" />,
+        icon: SentimentSatisfiedAltIcon,
+        color: "#43a047",
         label: 'Satisfied',
     },
     5: {
-        icon: <SentimentVerySatisfiedIcon color="success" />,
+        icon: SentimentVerySatisfiedIcon,
+        color: "#2e7d32",
         label: 'Very Satisfied',
     }
 };
 
 const fallbackIcon: RatingProp = {
-    icon: <SentimentNeutralIcon color="disabled" />,
+    icon: SentimentNeutralIcon,
+    color: "#9e9e9e",
     label: 'No Rating',
 };
 
@@ -47,16 +53,13 @@ const normalizeRating = (value: number): number => {
     return Math.min(5, Math.max(0, rounded));
 };
 
-const IconContainer = (props: IconContainerProps) => {
-    const { value, ...other } = props
-    return <span {...other}>{(customIcons[value] ?? fallbackIcon).icon}</span>
-}
 type RatingProps = {
     [key: number]: RatingProp
 }
 
 type RatingProp = {
-    icon: JSX.Element;
+    icon: typeof SentimentNeutralIcon;
+    color: string;
     label: string;
 }
 
@@ -66,6 +69,18 @@ type Props = {
 
 const ProductRating = ({ rating }: Props) => {
     const normalized = normalizeRating(rating);
+    const IconContainer = (props: IconContainerProps) => {
+        const { value, ...other } = props;
+        const item = customIcons[value] ?? fallbackIcon;
+        const Icon = item.icon;
+        const isActive = value === normalized;
+        return (
+            <span {...other}>
+                <Icon htmlColor={isActive ? item.color : "#bdbdbd"} />
+            </span>
+        );
+    };
+
     return (
         <StyledRating
             name="highlight-selected-only"

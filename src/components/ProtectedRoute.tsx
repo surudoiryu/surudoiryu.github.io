@@ -10,7 +10,7 @@ export default function ProtectedRoute({ children }: { children: JSX.Element }) 
     }
 
     if (!user) {
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/login" />;
     }
 
     return children;

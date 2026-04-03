@@ -85,7 +85,7 @@ export default function PageMap({ shopList, location, setLocation }: Props) {
                 setHighlighted(null);
                 return;
             }
-            navigate(`/cannabis-winkel/${targetCode}`, { replace: true });
+            navigate(`/cannabis-winkel/${targetCode}`);
         } else {
             console.log("Something went wrong with selecting a Cannabis Store");
         }
@@ -246,3 +246,5 @@ export default function PageMap({ shopList, location, setLocation }: Props) {
         </section>
     );
 }
+
+

@@ -1,30 +1,31 @@
 import { ListType } from "./types/data";
-import logo from './logo.svg';
 import './Home.css';
 import { Button, Typography } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import ProductenPerMerk from "./components/BrandProducts";
 import Leveranciers from "./components/Growers";
 import Loader from "./components/Loader";
+import Shops from "./components/Shops";
 
 type Props = {
     productList: ListType;
-    growerList: ListType;
 };
 
-export default function PageHome({ productList, growerList }: Props) {
+export default function PageHome({ productList }: Props) {
     const navigate = useNavigate();
     
     const handleOpenAllProducts = () => {
-        navigate('/cannabis', { replace: true }); 
+        navigate('/cannabis'); 
     }
+    const handleOpenAllGrowers = () => {
+        navigate('/telers');
+    };
+    const handleOpenAllShops = () => {
+        navigate('/kaart');
+    };
 
     return (
         <section className="home-container">
-            <header className="App-header">
-                <img src={logo} className="App-logo" alt="logo" />
-            </header>
-            
             <section id="headerInfo" style={{ textAlign: 'left', margin: 30 }}>
                 <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                     Waarom deze applicatie ?
@@ -47,10 +48,10 @@ export default function PageHome({ productList, growerList }: Props) {
                     Veel gezochte soortjes
                 </Typography>
                 <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
-                    <ProductenPerMerk limit={10} />
+                    <ProductenPerMerk limit={10} sortByViews />
                 </div>
                 <br />
-                <Button style={{ width: "90%" }} color="success" variant="contained" onClick={handleOpenAllProducts}>Bekijk alles</Button>
+                <Button style={{ width: "90%" }} color="success" variant="contained" onClick={handleOpenAllProducts}>Alle Cannabis</Button>
 
             </section>
 
@@ -68,8 +69,28 @@ export default function PageHome({ productList, growerList }: Props) {
                 <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
                     <Leveranciers />
                 </div>
+                <br />
+                <Button style={{ width: "90%" }} color="success" variant="contained" onClick={handleOpenAllGrowers}>Alle Telers</Button>
+            </section>
+
+            <section id="shopInfo" style={{ textAlign: "left", margin: 30 }}>
+                <Typography variant="h5" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                    Geselecteerde Coffeeshops
+                </Typography>
+                <Typography variant="body1" sx={{ color: "text.secondary" }}>
+                    Dit zijn de aangesloten coffeeshops uit de actuele dataset.
+                </Typography>
+            </section>
+            <section id="selectedShops">
+                <div style={{ width: "100%", overflow: "auto", display: "flex" }}>
+                    <Shops />
+                </div>
+                <br />
+                <Button style={{ width: "90%" }} color="success" variant="contained" onClick={handleOpenAllShops}>Alle Winkels</Button>
             </section>
             
         </section>
     )
 }
+
+

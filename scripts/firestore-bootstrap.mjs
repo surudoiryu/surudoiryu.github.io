@@ -129,7 +129,7 @@ async function run() {
             ref: firestore.collection("AppConfig").doc("firestoreSchema"),
             data: {
                 version: 1,
-                requiredCollections: ["Gebruikers", "reviews", "Producten", "Brands", "Shops", "SyncStatus", "Effects", "Tastes", "Terpenes", "Categories", "SubCategories"],
+                requiredCollections: ["Gebruikers", "reviews", "Producten", "Brands", "Shops", "SyncStatus", "Effects", "Tastes", "Terpenes", "Categories", "SubCategories", "Stats", "ViewStats"],
                 lastBootstrapAt: now,
                 tool: "firestore-bootstrap",
             },
@@ -147,6 +147,8 @@ run().catch((error) => {
     console.error("[firestore-bootstrap] failed:", error);
     process.exit(1);
 });
+
+
 
 
 

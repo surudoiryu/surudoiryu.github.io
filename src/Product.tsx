@@ -38,6 +38,7 @@ import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAlt
 import SentimentVerySatisfiedIcon from "@mui/icons-material/SentimentVerySatisfied";
 import SentimentNeutralIcon from "@mui/icons-material/SentimentNeutral";
 import { shareLink } from "./services/share";
+import { incrementEntityView } from "./services/viewStats";
 
 type ProductState = {
     id: string;
@@ -133,6 +134,21 @@ async function resolveArrayData<T>(items: unknown[]): Promise<Array<T | undefine
     );
 }
 
+
+function getStrainLabel(type: string | undefined): string {
+    const normalized = String(type || "").toLowerCase();
+    if (normalized.includes("sativa")) {
+        return "Sativa Dominant";
+    }
+    if (normalized.includes("indica")) {
+        return "Indica Dominant";
+    }
+    return "Hybrid";
+}
+
+function getCbdLabel(cbdValue: number): string {
+    return cbdValue < 1 ? "< 1%" : `${cbdValue}%`;
+}
 export default function PageProduct() {
     const navigate = useNavigate();
     const location = useLocation();
@@ -155,8 +171,6 @@ export default function PageProduct() {
         () => reviews.find((item) => item.productShortcode === productcode),
         [reviews, productcode]
     );
-    const resolvedEnergic = product?.data?.dominantTerpene?.energic ?? 0;
-    const resolvedRelaxing = product?.data?.dominantTerpene?.relaxing ?? 0;
     const rawProductImageSource =
         product?.data?.images?.main ||
         product?.data?.thumbnailUrl ||
@@ -165,12 +179,8 @@ export default function PageProduct() {
         "";
     const productImageUrl = useSignedMediaUrl(rawProductImageSource);
     const productImageToShow = productImageUrl || rawProductImageSource || "/android-chrome-192x192.png";
-    const strainLabel =
-        resolvedEnergic > 50
-            ? "Sativa Dominant"
-            : resolvedEnergic === resolvedRelaxing
-                ? "Hybrid"
-                : "Indica Dominant";
+    const strainLabel = getStrainLabel(product?.data?.type);
+    const cbdLabel = getCbdLabel(Number(product?.data?.cbdMax ?? 0));
     const tasteNames = asArray<TasteType | undefined>(product?.data?.tastes)
         .map((taste) => taste?.name)
         .filter((name): name is string => Boolean(name))
@@ -179,6 +189,13 @@ export default function PageProduct() {
         () => (showAllReviews ? productReviews : productReviews.slice(0, 5)),
         [productReviews, showAllReviews]
     );
+    const averageRating = useMemo(() => {
+        if (!productReviews.length) {
+            return product?.data.rating ?? 0;
+        }
+        const total = productReviews.reduce((sum, item) => sum + item.rating, 0);
+        return Math.min(5, Math.max(0, Math.ceil(total / productReviews.length)));
+    }, [product?.data.rating, productReviews]);
     const activeReviewIcon = reviewHover !== -1 ? reviewHover : reviewRating;
     const ReviewIconContainer = (props: IconContainerProps) => {
         const { value, ...other } = props;
@@ -202,6 +219,12 @@ export default function PageProduct() {
             setReviewRating(3);
         }
     }, [myReview]);
+
+    useEffect(() => {
+        void incrementEntityView("product", productcode).catch((error) => {
+            console.warn("Product view kon niet opgeslagen worden.", error);
+        });
+    }, [productcode]);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(productCollectionRef, async (snapshot) => {
@@ -335,13 +358,13 @@ export default function PageProduct() {
     }
 
     const openProductOverviewPage = () => {
-        navigate("/cannabis", { replace: true });
+        navigate("/cannabis");
     };
 
     const handleLike = async () => {
         setFormError(null);
         if (!user) {
-            navigate("/login", { replace: true });
+            navigate("/login");
             return;
         }
 
@@ -424,7 +447,12 @@ export default function PageProduct() {
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
                     {product?.data.shortDescription}
                 </Typography>
-                <ProductRating rating={product?.data.rating ?? 0} />
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                    <ProductRating rating={averageRating} />
+                    <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                        ({productReviews.length})
+                    </Typography>
+                </span>
 
                 <Chip
                     size="small"
@@ -447,10 +475,7 @@ export default function PageProduct() {
             <section>
                 <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600 }}>
                     THC {product?.data.thcMin}% - {product?.data.thcMax}%<br />
-                    CBD{" "}
-                    {product?.data.cbdMin === 0
-                        ? `< ${product?.data.cbdMax}%`
-                        : `${product?.data.cbdMin}% - ${product?.data.cbdMax}%`}
+                    CBD {cbdLabel}
                     <br />
                     <br />
                 </Typography>
@@ -572,3 +597,9 @@ export default function PageProduct() {
         </section>
     );
 }
+
+
+
+
+
+

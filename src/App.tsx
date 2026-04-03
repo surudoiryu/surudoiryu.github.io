@@ -4,13 +4,15 @@ import './App.css';
 import '@fontsource/roboto/300.css';
 import { ListType, GetDataType, LengthCountType } from './types/data';
 import BottomNav from './components/MobileMenu';
+import TopBar from './components/TopBar';
 import PageHome from './Home';
 import PageMap from './Map';
 import PageBlog from './Blog';
 import PageProduct from './Product';
 import PageProductsOverview from './ProductsOverview';
+import PageGrowersOverview from './GrowersOverview';
 import { LocationObject } from './types/shop';
-import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import PageShop from './Shop';
 import Login from './Login';
 import Signup from './Signup';
@@ -18,9 +20,53 @@ import PageGrower from './Grower';
 import { AuthProvider } from './context/AuthContext';
 import Profile from './Profile';
 import ProtectedRoute from './components/ProtectedRoute';
-import { Alert, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
+import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { db } from './firebaseConfig';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, increment, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+
+function toRouteStatKey(pathname: string): string {
+  if (pathname === "/") return "home";
+  if (pathname.startsWith("/kaart")) return "map";
+  if (pathname.startsWith("/blog")) return "blog";
+  if (pathname.startsWith("/cannabis-winkel")) return "shopDetail";
+  if (pathname.startsWith("/cannabis")) return "cannabis";
+  if (pathname.startsWith("/telers")) return "growers";
+  if (pathname.startsWith("/login")) return "login";
+  if (pathname.startsWith("/aanmelden")) return "signup";
+  if (pathname.startsWith("/profiel")) return "profile";
+  return "other";
+}
+
+function RouteStatsTracker() {
+  const location = useLocation();
+  const [lastTrackedPath, setLastTrackedPath] = useState<string>("");
+
+  useEffect(() => {
+    if (!navigator.onLine) {
+      return;
+    }
+    if (location.pathname === lastTrackedPath) {
+      return;
+    }
+
+    setLastTrackedPath(location.pathname);
+    const key = toRouteStatKey(location.pathname);
+
+    void setDoc(
+      doc(db, "Stats", "pageViews"),
+      {
+        [key]: increment(1),
+        total: increment(1),
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    ).catch((error) => {
+      console.warn("Route statistiek kon niet opgeslagen worden.", error);
+    });
+  }, [lastTrackedPath, location.pathname]);
+
+  return null;
+}
 
 
 function App() {
@@ -248,20 +294,23 @@ function App() {
           </DialogActions>
         </Dialog>
         <BrowserRouter>
-          {!isOnline && (
-            <Alert severity="info">
-              Je bent offline. De app toont lokaal beschikbare data en synchroniseert weer zodra je online bent.
-            </Alert>
-          )}
-          {isOnline && (
-            <Alert severity="success">
-              {lastSyncSummary || "Catalogus sync draait via background worker."}
-            </Alert>
-          )}
-          <Routes>
+          <TopBar />
+          <RouteStatsTracker />
+          <Box sx={{ pt: 8 }}>
+            {!isOnline && (
+              <Alert severity="info">
+                Je bent offline. De app toont lokaal beschikbare data en synchroniseert weer zodra je online bent.
+              </Alert>
+            )}
+            {isOnline && (
+              <Alert severity="success">
+                {lastSyncSummary || "Catalogus sync draait via background worker."}
+              </Alert>
+            )}
+            <Routes>
             <Route
               path='/'
-              element={<PageHome productList={productList} growerList={growerList} />}
+              element={<PageHome productList={productList} />}
             />
 
             <Route
@@ -296,7 +345,7 @@ function App() {
 
             <Route
               path='/telers'
-              element={<Navigate to='/' replace />}
+              element={<PageGrowersOverview />}
             />
 
             <Route
@@ -331,7 +380,8 @@ function App() {
                 </ProtectedRoute>
               }
             />
-          </Routes>
+            </Routes>
+          </Box>
           <BottomNav />
         </BrowserRouter>
       </AuthProvider>

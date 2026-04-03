@@ -1,5 +1,4 @@
 import { Button, Card, CardContent, CardMedia, Typography } from "@mui/material";
-import logo from "./logo.svg";
 
 const posts = [
     {
@@ -31,9 +30,6 @@ const posts = [
 export default function PageBlog() {
     return (
         <section style={{ textAlign: "left", margin: 30, paddingBottom: 90 }}>
-            <header className="App-header" style={{ minHeight: 180 }}>
-                <img src={logo} className="App-logo" alt="logo" />
-            </header>
             <Typography variant="h5" sx={{ color: "text.secondary", fontWeight: 700, mb: 1 }}>
                 Blog
             </Typography>
@@ -71,3 +67,5 @@ export default function PageBlog() {
         </section>
     );
 }
+
+

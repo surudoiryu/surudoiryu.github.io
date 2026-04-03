@@ -1,6 +1,5 @@
 import { Alert, Card, CardContent, Typography } from "@mui/material";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "./logo.svg";
 import RegisterForm from "./components/RegisterForm";
 
 const Signup = () => {
@@ -8,9 +7,6 @@ const Signup = () => {
 
     return (
         <section style={{ textAlign: "left", margin: 30, paddingBottom: 90 }}>
-            <header className="App-header" style={{ minHeight: 180 }}>
-                <img src={logo} className="App-logo" alt="logo" />
-            </header>
 
             <Card sx={{ maxWidth: 560, mx: "auto" }}>
                 <CardContent>
@@ -27,7 +23,7 @@ const Signup = () => {
                         </Alert>
                     )}
 
-                    <RegisterForm onSuccess={() => navigate("/profiel", { replace: true })} />
+                    <RegisterForm onSuccess={() => navigate("/profiel")} />
 
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: 2 }}>
                         Heb je al een account? <Link to="/login">Log dan in...</Link>
@@ -39,3 +35,5 @@ const Signup = () => {
 };
 
 export default Signup;
+
+

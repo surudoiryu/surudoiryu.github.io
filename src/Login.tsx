@@ -8,7 +8,6 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import logo from "./logo.svg";
 import { useAuth } from "./context/AuthContext";
 
 const Login = () => {
@@ -26,7 +25,7 @@ const Login = () => {
 
         try {
             await login(email, password);
-            navigate("/profiel", { replace: true });
+            navigate("/profiel");
         } catch (loginError) {
             const message =
                 loginError instanceof Error ? loginError.message : "Inloggen is mislukt.";
@@ -38,9 +37,6 @@ const Login = () => {
 
     return (
         <section style={{ textAlign: "left", margin: 30, paddingBottom: 90 }}>
-            <header className="App-header" style={{ minHeight: 180 }}>
-                <img src={logo} className="App-logo" alt="logo" />
-            </header>
 
             <Card sx={{ maxWidth: 560, mx: "auto" }}>
                 <CardContent>
@@ -106,3 +102,5 @@ const Login = () => {
 };
 
 export default Login;
+
+

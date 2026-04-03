@@ -37,7 +37,7 @@ export default function BottomNav() {
                 showLabels
                 value={selectedPath}
                 onChange={(_, newValue) => {
-                    navigate(`${newValue}`, { replace: true }); 
+                    navigate(`${newValue}`); 
                 }}
             >
                 <BottomNavigationAction value={'/'} label="Home" icon={<CottageIcon />} />

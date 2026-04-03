@@ -23,11 +23,15 @@ import { TasteType } from "../types/taste";
 import ProductCard from "./ProductCard";
 import { db } from "../firebaseConfig";
 import { useAuth } from "../context/AuthContext";
+import { viewStatsCollectionRef } from "../firebaseCollections";
 
 interface BrandProps {
     brandId?: string;
     limit?: number;
     showFilters?: boolean;
+    initialSearchTerm?: string;
+    initialType?: string;
+    sortByViews?: boolean;
 }
 
 interface ProductItem {
@@ -98,15 +102,15 @@ function toPositiveEffectNames(product: ProductType): string[] {
     return Array.from(new Set([...dominant, ...extra]));
 }
 
-const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) => {
+const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTerm, initialType, sortByViews = false }: BrandProps) => {
     const { profile } = useAuth();
     const [producten, setProducten] = useState<ProductItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [filterOpen, setFilterOpen] = useState(false);
 
-    const [searchTerm, setSearchTerm] = useState("");
-    const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+    const [searchTerm, setSearchTerm] = useState(initialSearchTerm ?? "");
+    const [selectedTypes, setSelectedTypes] = useState<string[]>(initialType ? [initialType] : []);
     const [thcRange, setThcRange] = useState<[number, number]>([0, 35]);
     const [cbdRange, setCbdRange] = useState<[number, number]>([0, 30]);
     const [selectedTastes, setSelectedTastes] = useState<string[]>([]);
@@ -117,16 +121,65 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) =
     const [minimumRating, setMinimumRating] = useState(0);
 
     const [reviewedProductCodes, setReviewedProductCodes] = useState<Set<string>>(new Set());
+    const [reviewStatsByProduct, setReviewStatsByProduct] = useState<
+        Record<string, { count: number; rating: number }>
+    >({});
+    const [viewStatsByProduct, setViewStatsByProduct] = useState<Record<string, number>>({});
+
+    useEffect(() => {
+        setSearchTerm(initialSearchTerm ?? "");
+    }, [initialSearchTerm]);
+
+    useEffect(() => {
+        setSelectedTypes(initialType ? [initialType] : []);
+    }, [initialType]);
 
     useEffect(() => {
         const unsubscribeReviews = onSnapshot(collection(db, "reviews"), (snapshot) => {
+            const stats: Record<string, { sum: number; count: number }> = {};
             const codes = snapshot.docs
-                .map((docItem) => docItem.data().productShortcode as string | undefined)
+                .map((docItem) => docItem.data() as { productShortcode?: string; rating?: number })
+                .filter((item) => Boolean(item.productShortcode))
+                .map((item) => {
+                    const code = item.productShortcode as string;
+                    const rating = Number(item.rating ?? 0);
+                    if (!stats[code]) {
+                        stats[code] = { sum: 0, count: 0 };
+                    }
+                    stats[code].sum += rating;
+                    stats[code].count += 1;
+                    return code;
+                })
                 .filter((code): code is string => Boolean(code));
             setReviewedProductCodes(new Set(codes));
+
+            const normalized: Record<string, { count: number; rating: number }> = {};
+            Object.entries(stats).forEach(([productCode, value]) => {
+                const average = value.count ? Math.ceil(value.sum / value.count) : 0;
+                normalized[productCode] = {
+                    count: value.count,
+                    rating: Math.min(5, Math.max(0, average)),
+                };
+            });
+            setReviewStatsByProduct(normalized);
         });
 
         return () => unsubscribeReviews();
+    }, []);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(viewStatsCollectionRef, (snapshot) => {
+            const nextStats: Record<string, number> = {};
+            snapshot.docs.forEach((item) => {
+                const data = item.data() as { type?: string; shortcode?: string; views?: number };
+                if (data.type === "product" && data.shortcode) {
+                    nextStats[data.shortcode] = Number(data.views ?? 0);
+                }
+            });
+            setViewStatsByProduct(nextStats);
+        });
+
+        return () => unsubscribe();
     }, []);
 
     useEffect(() => {
@@ -243,11 +296,7 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) =
                 const validProducts = products.filter(
                     (item): item is ProductItem => Boolean(item)
                 );
-                if (limit !== undefined && limit > 0) {
-                    setProducten(validProducts.slice(0, limit));
-                } else {
-                    setProducten(validProducts);
-                }
+                setProducten(validProducts);
                 setLoading(false);
             } catch (fetchError) {
                 const message =
@@ -309,7 +358,7 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) =
     const filteredProducts = useMemo(() => {
         const normalizedSearch = searchTerm.trim().toLowerCase();
 
-        return producten.filter(({ data }) => {
+        const filtered = producten.filter(({ data }) => {
             const growerName = ((data.brand as GrowerType | undefined)?.title ?? "").toLowerCase();
             const title = (data.title ?? "").toLowerCase();
             const description = (data.shortDescription ?? data.description ?? "").toLowerCase();
@@ -364,14 +413,28 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) =
                 return false;
             }
 
-            if (minimumRating > 0 && data.rating < minimumRating) {
+            if (minimumRating > 0 && (reviewStatsByProduct[data.shortcode]?.rating ?? data.rating ?? 0) < minimumRating) {
                 return false;
             }
 
             return true;
         });
+        const sorted = !sortByViews
+            ? filtered
+            : [...filtered].sort((a, b) => {
+                const viewsA = viewStatsByProduct[a.data.shortcode] ?? 0;
+                const viewsB = viewStatsByProduct[b.data.shortcode] ?? 0;
+                return viewsB - viewsA;
+            });
+
+        if (limit !== undefined && limit > 0) {
+            return sorted.slice(0, limit);
+        }
+
+        return sorted;
     }, [
         cbdRange,
+        limit,
         minimumRating,
         onlyLiked,
         onlyWithReviews,
@@ -384,6 +447,9 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) =
         selectedTastes,
         selectedTypes,
         thcRange,
+        reviewStatsByProduct,
+        sortByViews,
+        viewStatsByProduct,
     ]);
 
     const resetFilters = () => {
@@ -433,7 +499,14 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false }: BrandProps) =
             <div style={{ width: "100%", overflow: "auto", display: "flex", flexWrap: showFilters ? "wrap" : "nowrap" }}>
                 {filteredProducts.map((product) => (
                     <div key={`productcontainer-${product.id}`} style={{ minWidth: 350, height: 500, margin: 16 }}>
-                        <ProductCard key={`productcard-${product.id}`} product={product.data} />
+                        <ProductCard
+                            key={`productcard-${product.id}`}
+                            product={{
+                                ...product.data,
+                                rating: reviewStatsByProduct[product.data.shortcode]?.rating ?? product.data.rating,
+                            }}
+                            reviewCount={reviewStatsByProduct[product.data.shortcode]?.count ?? 0}
+                        />
                     </div>
                 ))}
                 {filteredProducts.length === 0 && (
