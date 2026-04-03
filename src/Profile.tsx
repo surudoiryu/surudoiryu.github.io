@@ -6,7 +6,6 @@ import {
     Button,
     Card,
     CardContent,
-    Chip,
     Divider,
     FormControlLabel,
     Stack,
@@ -20,6 +19,8 @@ import { useAuth } from "./context/AuthContext";
 import { ProductReview, UserProfile } from "./types/user";
 import { productCollectionRef } from "./firebaseCollections";
 import { Link, useParams } from "react-router-dom";
+import { ProductType } from "./types/product";
+import ProductCard from "./components/ProductCard";
 
 type ProfileViewProps = {
     activeProfile: UserProfile;
@@ -60,20 +61,28 @@ function ProfileHeader({ activeProfile }: { activeProfile: UserProfile }) {
 }
 
 function ProfileView({ activeProfile, reviews }: ProfileViewProps) {
-    const [likedNames, setLikedNames] = useState<string[]>([]);
+    const [likedProducts, setLikedProducts] = useState<ProductType[]>([]);
 
     React.useEffect(() => {
         if (!activeProfile.likedProducts.length) {
-            setLikedNames([]);
+            setLikedProducts([]);
             return;
         }
 
         const unsubscribe = onSnapshot(productCollectionRef, (snapshot) => {
-            const titles = snapshot.docs
+            const likedCodes = new Set(activeProfile.likedProducts);
+            const productsByCode = new Map(
+                snapshot.docs
                 .map((item) => item.data())
-                .filter((item) => activeProfile.likedProducts.includes(item.shortcode))
-                .map((item) => (item.title as string) ?? "Onbekend soortje");
-            setLikedNames(titles);
+                .filter((item) => likedCodes.has(item.shortcode))
+                .map((item) => [item.shortcode as string, item as ProductType])
+            );
+
+            const orderedProducts = activeProfile.likedProducts
+                .map((code) => productsByCode.get(code))
+                .filter((item): item is ProductType => Boolean(item));
+
+            setLikedProducts(orderedProducts);
         });
 
         return () => unsubscribe();
@@ -86,19 +95,16 @@ function ProfileView({ activeProfile, reviews }: ProfileViewProps) {
             <Typography variant="h6" sx={{ color: "text.secondary", fontWeight: 600 }}>
                 Gelikete soortjes
             </Typography>
-            {!likedNames.length ? (
+            {!likedProducts.length ? (
                 <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
                     Nog geen likes.
                 </Typography>
             ) : (
-                <Box sx={{ mb: 2 }}>
-                    {likedNames.map((name, index) => (
-                        <Chip
-                            key={`${name}-${index}`}
-                            label={name}
-                            size="small"
-                            sx={{ mr: 1, mb: 1 }}
-                        />
+                <Box sx={{ width: "100%", overflow: "auto", display: "flex", flexWrap: "wrap", mb: 2 }}>
+                    {likedProducts.map((product) => (
+                        <div key={`liked-product-${product.shortcode}`} style={{ minWidth: 320, height: 500, margin: 8 }}>
+                            <ProductCard product={product} />
+                        </div>
                     ))}
                 </Box>
             )}
@@ -186,11 +192,11 @@ export default function Profile() {
             let resolvedUid = target;
             let profileData: UserProfile | null = null;
 
-            const byUid = await getDoc(doc(db, "users", target));
+            const byUid = await getDoc(doc(db, "Gebruikers", target));
             if (byUid.exists()) {
                 profileData = byUid.data() as UserProfile;
             } else {
-                const byUsername = await getDocs(query(collection(db, "users"), where("username", "==", target.toLowerCase())));
+                const byUsername = await getDocs(query(collection(db, "Gebruikers"), where("username", "==", target.toLowerCase())));
                 if (!byUsername.empty) {
                     resolvedUid = byUsername.docs[0].id;
                     profileData = byUsername.docs[0].data() as UserProfile;

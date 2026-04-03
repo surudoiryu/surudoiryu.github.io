@@ -107,6 +107,32 @@ query Products {
   }
 }
 `;
+const TENANTS_QUERY = `
+query TenantsForCatalogSync {
+  tenants {
+    id
+    businessName
+    type
+    companyAddress
+    logoMediaId
+    isApproved
+    vendorGLN
+    billingEmail
+    ordersEmail
+    createdAt
+    updatedAt
+  }
+}
+`;
+const SYSTEM_DATA_QUERY = `
+query SystemData {
+  terpenes { id name description }
+  flavors { id name description }
+  effects { id name description positive }
+  categories { id name description vat { id name rate note } }
+  subCategories { id name description categoryId }
+}
+`;
 
 const GROWER_QUERY_CANDIDATES = [
     {
@@ -383,17 +409,28 @@ function inferEnergic(ratio) {
     return Math.max(0, Math.min(100, Math.round((left / total) * 100)));
 }
 
-function buildHeaders() {
-    const headers = { "Content-Type": "application/json" };
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    if (apiKey) headers["x-api-key"] = apiKey;
-    return headers;
+function buildHeaderVariants() {
+    const base = { "Content-Type": "application/json" };
+    const variants = [];
+
+    if (authToken && apiKey) {
+        variants.push({ ...base, Authorization: `Bearer ${authToken}`, "x-api-key": apiKey });
+        variants.push({ ...base, Authorization: `Bearer ${authToken}` });
+        variants.push({ ...base, "x-api-key": apiKey });
+    } else if (authToken) {
+        variants.push({ ...base, Authorization: `Bearer ${authToken}` });
+    } else if (apiKey) {
+        variants.push({ ...base, "x-api-key": apiKey });
+    }
+
+    variants.push(base);
+    return variants;
 }
 
-async function executeGraphQl(query, variables) {
+async function executeGraphQlOnce(query, variables, headers) {
     const response = await fetch(endpoint, {
         method: "POST",
-        headers: buildHeaders(),
+        headers,
         body: JSON.stringify({ query, variables }),
     });
 
@@ -416,6 +453,28 @@ async function executeGraphQl(query, variables) {
     }
     return payload.data || {};
 }
+
+async function executeGraphQl(query, variables) {
+    const variants = buildHeaderVariants();
+    let lastError = null;
+
+    for (const headers of variants) {
+        try {
+            return await executeGraphQlOnce(query, variables, headers);
+        } catch (error) {
+            lastError = error;
+            const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+            const hasApiKey = Object.prototype.hasOwnProperty.call(headers, "x-api-key");
+            if (hasApiKey && message.includes("invalid api key")) {
+                continue;
+            }
+            throw error;
+        }
+    }
+
+    throw lastError || new Error("GraphQL request mislukt.");
+}
+
 async function executeFirstSuccessfulArray(candidates) {
     const reasons = [];
 
@@ -433,6 +492,149 @@ async function executeFirstSuccessfulArray(candidates) {
     }
 
     return { items: [], reasons };
+}
+async function fetchTenants() {
+    try {
+        const data = await executeGraphQl(TENANTS_QUERY);
+        return safeArray(data?.tenants);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[catalog-sync-worker] tenants query overgeslagen: ${message}`);
+        return [];
+    }
+}
+async function fetchSystemData() {
+    try {
+        const data = await executeGraphQl(SYSTEM_DATA_QUERY);
+        return {
+            terpenes: safeArray(data?.terpenes),
+            flavors: safeArray(data?.flavors),
+            effects: safeArray(data?.effects),
+            categories: safeArray(data?.categories),
+            subCategories: safeArray(data?.subCategories),
+        };
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[catalog-sync-worker] systemdata query overgeslagen: ${message}`);
+        return {
+            terpenes: [],
+            flavors: [],
+            effects: [],
+            categories: [],
+            subCategories: [],
+        };
+    }
+}
+
+function buildSystemSyncOperations(firestore, systemData) {
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    const operations = [];
+
+    safeArray(systemData.terpenes).forEach((item, index) => {
+        const name = firstNonEmptyString(item?.name, `Terpene-${index + 1}`);
+        const docId = firstNonEmptyString(item?.id, toSlug(name), `terpene-${index + 1}`);
+        operations.push({
+            ref: firestore.collection("Terpenes").doc(docId),
+            data: {
+                id: toNumericId(item?.id, index + 1),
+                sourceId: firstNonEmptyString(item?.id),
+                name,
+                description: firstNonEmptyString(item?.description),
+                icon: "",
+                color: "#6d4c41",
+                effect: "",
+                medical: "",
+                energic: 50,
+                relaxing: 50,
+                source: "graphql",
+                syncedAt: now,
+            },
+        });
+    });
+
+    safeArray(systemData.flavors).forEach((item, index) => {
+        const name = firstNonEmptyString(item?.name, `Smaak-${index + 1}`);
+        const docId = firstNonEmptyString(item?.id, toSlug(name), `taste-${index + 1}`);
+        operations.push({
+            ref: firestore.collection("Tastes").doc(docId),
+            data: {
+                id: toNumericId(item?.id, index + 1),
+                sourceId: firstNonEmptyString(item?.id),
+                name,
+                description: firstNonEmptyString(item?.description),
+                icon: "",
+                source: "graphql",
+                syncedAt: now,
+            },
+        });
+    });
+
+    safeArray(systemData.effects).forEach((item, index) => {
+        const name = firstNonEmptyString(item?.name, `Effect-${index + 1}`);
+        const docId = firstNonEmptyString(item?.id, toSlug(name), `effect-${index + 1}`);
+        operations.push({
+            ref: firestore.collection("Effects").doc(docId),
+            data: {
+                id: toNumericId(item?.id, index + 1),
+                sourceId: firstNonEmptyString(item?.id),
+                name,
+                description: firstNonEmptyString(item?.description),
+                positive: Boolean(item?.positive),
+                icon: "",
+                source: "graphql",
+                syncedAt: now,
+            },
+        });
+    });
+
+    safeArray(systemData.categories).forEach((item, index) => {
+        const name = firstNonEmptyString(item?.name, `Categorie-${index + 1}`);
+        const docId = firstNonEmptyString(item?.id, toSlug(name), `category-${index + 1}`);
+        const vat = item?.vat || {};
+        operations.push({
+            ref: firestore.collection("Categories").doc(docId),
+            data: {
+                id: firstNonEmptyString(item?.id, docId),
+                name,
+                description: firstNonEmptyString(item?.description),
+                vat: {
+                    id: firstNonEmptyString(vat?.id),
+                    name: firstNonEmptyString(vat?.name),
+                    rate: Number(vat?.rate || 0),
+                    note: firstNonEmptyString(vat?.note),
+                },
+                source: "graphql",
+                syncedAt: now,
+            },
+        });
+    });
+
+    safeArray(systemData.subCategories).forEach((item, index) => {
+        const name = firstNonEmptyString(item?.name, `SubCategorie-${index + 1}`);
+        const docId = firstNonEmptyString(item?.id, toSlug(name), `subcategory-${index + 1}`);
+        operations.push({
+            ref: firestore.collection("SubCategories").doc(docId),
+            data: {
+                id: firstNonEmptyString(item?.id, docId),
+                name,
+                description: firstNonEmptyString(item?.description),
+                categoryId: firstNonEmptyString(item?.categoryId),
+                source: "graphql",
+                syncedAt: now,
+            },
+        });
+    });
+
+    return {
+        operations,
+        counts: {
+            terpenes: safeArray(systemData.terpenes).length,
+            tastes: safeArray(systemData.flavors).length,
+            effects: safeArray(systemData.effects).length,
+            categories: safeArray(systemData.categories).length,
+            subCategories: safeArray(systemData.subCategories).length,
+        },
+    };
 }
 
 function toGrowerDocument(source, fallbackName, fallbackNumericId) {
@@ -725,14 +927,34 @@ async function run() {
     initFirebaseAdmin();
     const firestore = admin.firestore();
     const products = await fetchAllProducts();
+    const systemData = await fetchSystemData();
 
     const brandDocs = new Map();
     const shopDocs = new Map();
     const shopSeedByName = new Map(shopSeedData.map((item) => [normalizeText(item.name), item]));
     const productOps = [];
 
-    const fetchedGrowers = await fetchGrowers();
-    const fetchedShops = await fetchShops(shopSeedByName);
+    const tenants = await fetchTenants();
+
+    const tenantGrowers = safeArray(tenants)
+        .filter((item) => isGrowerTenant(item?.type))
+        .map((item, index) => {
+            const fallbackName = firstNonEmptyString(item?.businessName, item?.name, item?.title, item?.displayName, `grower-${index + 1}`);
+            return toGrowerDocument(item, fallbackName, index + 1);
+        })
+        .filter((item) => item.sourceId || item.data.title);
+
+    const tenantShops = safeArray(tenants)
+        .filter((item) => isShopTenant(item?.type))
+        .map((item, index) => {
+            const name = firstNonEmptyString(item?.businessName, item?.name, item?.title, item?.displayName);
+            const seed = shopSeedByName.get(normalizeText(name));
+            return toShopDocument(item, name, index + 1, seed);
+        })
+        .filter((item) => item.data.shortcode);
+
+    const fetchedGrowers = tenantGrowers.length ? tenantGrowers : await fetchGrowers();
+    const fetchedShops = tenantShops.length ? tenantShops : await fetchShops(shopSeedByName);
 
     const growersBySourceId = new Map();
     const growersByName = new Map();
@@ -817,6 +1039,11 @@ async function run() {
         await commitInChunks(firestore, metaOps);
     }
 
+    const systemSync = buildSystemSyncOperations(firestore, systemData);
+    if (systemSync.operations.length) {
+        await commitInChunks(firestore, systemSync.operations);
+    }
+
     await firestore.collection("SyncStatus").doc("graphql").set(
         {
             source: "graphql",
@@ -825,6 +1052,11 @@ async function run() {
             syncedProducts: products.length,
             syncedShops: shopDocs.size,
             syncedGrowers: brandDocs.size,
+            syncedTerpenes: systemSync.counts.terpenes,
+            syncedTastes: systemSync.counts.tastes,
+            syncedEffects: systemSync.counts.effects,
+            syncedCategories: systemSync.counts.categories,
+            syncedSubCategories: systemSync.counts.subCategories,
             lastSuccessfulSyncAt: admin.firestore.FieldValue.serverTimestamp(),
             worker: "catalog-sync-worker",
         },
@@ -832,7 +1064,7 @@ async function run() {
     );
 
     console.log(
-        `[catalog-sync-worker] done - endpoint=${endpoint}, products=${products.length}, shops=${shopDocs.size}, growers=${brandDocs.size}`
+        `[catalog-sync-worker] done - endpoint=${endpoint}, products=${products.length}, shops=${shopDocs.size}, growers=${brandDocs.size}, terpenes=${systemSync.counts.terpenes}, tastes=${systemSync.counts.tastes}, effects=${systemSync.counts.effects}, categories=${systemSync.counts.categories}, subCategories=${systemSync.counts.subCategories}`
     );
 }
 
@@ -861,6 +1093,23 @@ run().catch(async (error) => {
     }
     process.exit(1);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

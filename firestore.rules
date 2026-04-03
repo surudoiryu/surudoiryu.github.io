@@ -5,6 +5,14 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isOwnReviewId(reviewId) {
+      return isSignedIn() && reviewId.matches("^" + request.auth.uid + "_.*$");
+    }
+
     // Catalog data: alleen lezen vanuit client, schrijven via worker/service account.
     match /Producten/{docId} {
       allow read: if true;
@@ -21,22 +29,48 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    match /Terpenes/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /Tastes/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /Effects/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     match /SyncStatus/{docId} {
       allow read: if true;
       allow write: if false;
     }
 
+    match /Categories/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /SubCategories/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
     // User profile: ingelogde gebruikers kunnen lezen, alleen eigen profiel schrijven.
-    match /users/{userId} {
+    match /Gebruikers/{userId} {
       allow read: if isSignedIn();
-      allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
+      allow create, update, delete: if isOwner(userId);
     }
 
     // Reviews: direct client write toegestaan voor ingelogde user (eigen review).
     match /reviews/{reviewId} {
       allow read: if true;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
   }
 }

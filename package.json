@@ -44,6 +44,8 @@
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
     "sync:catalog": "node scripts/catalog-sync-worker.mjs",
+    "migrate:firestore": "node scripts/firestore-bootstrap.mjs && npm run deploy:firestore:rules",
+    "deploy:firestore:rules": "node scripts/firestore-deploy-rules.mjs",
     "dev": "react-scripts start",
     "start": "react-scripts start",
     "build": "react-scripts build",
@@ -72,3 +74,4 @@
     "gh-pages": "^6.1.1"
   }
 }
+

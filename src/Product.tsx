@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { DocumentReference, getDoc, onSnapshot } from "firebase/firestore";
-import { productCollectionRef } from "./firebaseCollections";
+import { DocumentReference, getDoc, onSnapshot, query, where } from "firebase/firestore";
+import { productCollectionRef, reviewsCollectionRef } from "./firebaseCollections";
 import "./Product.css";
 import {
     Alert,
     Button,
+    Card,
+    CardContent,
     IconButton,
     LinearProgress,
-    Rating,
+    Stack,
     TextField,
     Typography,
 } from "@mui/material";
+import MuiRating, { IconContainerProps } from "@mui/material/Rating";
 import { GrowerType } from "./types/grower";
 import { EffectType } from "./types/effect";
 import { TerpeneType } from "./types/terpene";
@@ -25,13 +28,51 @@ import ProductRating from "./components/Rating";
 import CircleIcon from "@mui/icons-material/Circle";
 import VolunteerActivismOutlinedIcon from "@mui/icons-material/VolunteerActivismOutlined";
 import { TasteType } from "./types/taste";
+import { ProductReview } from "./types/user";
 import { useAuth } from "./context/AuthContext";
+import { useSignedMediaUrl } from "./hooks/useSignedMediaUrl";
+import SentimentVeryDissatisfiedIcon from "@mui/icons-material/SentimentVeryDissatisfied";
+import SentimentDissatisfiedIcon from "@mui/icons-material/SentimentDissatisfied";
+import SentimentSatisfiedIcon from "@mui/icons-material/SentimentSatisfied";
+import SentimentSatisfiedAltIcon from "@mui/icons-material/SentimentSatisfiedAltOutlined";
+import SentimentVerySatisfiedIcon from "@mui/icons-material/SentimentVerySatisfied";
+import SentimentNeutralIcon from "@mui/icons-material/SentimentNeutral";
+import { shareLink } from "./services/share";
 
 type ProductState = {
     id: string;
     data: ProductType;
     brand?: GrowerType;
 } | null;
+
+type RatingOption = {
+    Icon: typeof SentimentVeryDissatisfiedIcon;
+    color: string;
+    label: string;
+};
+
+const reviewIcons: Record<number, RatingOption> = {
+    1: { Icon: SentimentVeryDissatisfiedIcon, color: "#d32f2f", label: "Zeer ontevreden" },
+    2: { Icon: SentimentDissatisfiedIcon, color: "#e53935", label: "Ontevreden" },
+    3: { Icon: SentimentSatisfiedIcon, color: "#f57c00", label: "Neutraal" },
+    4: { Icon: SentimentSatisfiedAltIcon, color: "#43a047", label: "Tevreden" },
+    5: { Icon: SentimentVerySatisfiedIcon, color: "#2e7d32", label: "Zeer tevreden" },
+};
+
+const fallbackReviewIcon: RatingOption = {
+    Icon: SentimentNeutralIcon,
+    color: "#9e9e9e",
+    label: "Geen score",
+};
+
+function toMillis(value: unknown): number {
+    if (!value || typeof value !== "object") {
+        return 0;
+    }
+
+    const candidate = value as { toMillis?: () => number };
+    return typeof candidate.toMillis === "function" ? candidate.toMillis() : 0;
+}
 
 function asArray<T>(value: unknown): T[] {
     return Array.isArray(value) ? (value as T[]) : [];
@@ -96,7 +137,7 @@ export default function PageProduct() {
     const navigate = useNavigate();
     const location = useLocation();
     const productcode = location.pathname.split("/")[2];
-    const { user, isProductLiked, toggleLike, saveReview, reviews } = useAuth();
+    const { user, isProductLiked, toggleLike, saveReview, deleteReview, reviews } = useAuth();
 
     const [product, setProduct] = useState<ProductState>(null);
     const [loading, setLoading] = useState(true);
@@ -104,7 +145,11 @@ export default function PageProduct() {
     const [formError, setFormError] = useState<string | null>(null);
     const [reviewText, setReviewText] = useState("");
     const [reviewRating, setReviewRating] = useState<number>(3);
+    const [reviewHover, setReviewHover] = useState<number>(-1);
     const [savingReview, setSavingReview] = useState(false);
+    const [removingReview, setRemovingReview] = useState(false);
+    const [productReviews, setProductReviews] = useState<ProductReview[]>([]);
+    const [showAllReviews, setShowAllReviews] = useState(false);
 
     const myReview = useMemo(
         () => reviews.find((item) => item.productShortcode === productcode),
@@ -112,6 +157,14 @@ export default function PageProduct() {
     );
     const resolvedEnergic = product?.data?.dominantTerpene?.energic ?? 0;
     const resolvedRelaxing = product?.data?.dominantTerpene?.relaxing ?? 0;
+    const rawProductImageSource =
+        product?.data?.images?.main ||
+        product?.data?.thumbnailUrl ||
+        product?.data?.images?.close ||
+        product?.data?.images?.mood ||
+        "";
+    const productImageUrl = useSignedMediaUrl(rawProductImageSource);
+    const productImageToShow = productImageUrl || rawProductImageSource || "/android-chrome-192x192.png";
     const strainLabel =
         resolvedEnergic > 50
             ? "Sativa Dominant"
@@ -122,11 +175,31 @@ export default function PageProduct() {
         .map((taste) => taste?.name)
         .filter((name): name is string => Boolean(name))
         .join(", ");
+    const displayedReviews = useMemo(
+        () => (showAllReviews ? productReviews : productReviews.slice(0, 5)),
+        [productReviews, showAllReviews]
+    );
+    const activeReviewIcon = reviewHover !== -1 ? reviewHover : reviewRating;
+    const ReviewIconContainer = (props: IconContainerProps) => {
+        const { value, ...other } = props;
+        const iconConfig = reviewIcons[value] ?? fallbackReviewIcon;
+        const IconComponent = iconConfig.Icon;
+        const isActive = value === activeReviewIcon;
+
+        return (
+            <span {...other}>
+                <IconComponent htmlColor={isActive ? iconConfig.color : "#bdbdbd"} />
+            </span>
+        );
+    };
 
     useEffect(() => {
         if (myReview) {
             setReviewText(myReview.review);
             setReviewRating(myReview.rating);
+        } else {
+            setReviewText("");
+            setReviewRating(3);
         }
     }, [myReview]);
 
@@ -233,6 +306,26 @@ export default function PageProduct() {
         return () => unsubscribe();
     }, [productcode]);
 
+    useEffect(() => {
+        const reviewQuery = query(reviewsCollectionRef, where("productShortcode", "==", productcode));
+        const unsubscribe = onSnapshot(reviewQuery, (snapshot) => {
+            const items = snapshot.docs
+                .map((item) => ({
+                    id: item.id,
+                    ...(item.data() as Omit<ProductReview, "id">),
+                }))
+                .sort((a, b) => {
+                    const aTs = Math.max(toMillis(a.updatedAt), toMillis(a.createdAt));
+                    const bTs = Math.max(toMillis(b.updatedAt), toMillis(b.createdAt));
+                    return bTs - aTs;
+                });
+
+            setProductReviews(items);
+        });
+
+        return () => unsubscribe();
+    }, [productcode]);
+
     if (loading) {
         return <div>Loading...</div>;
     }
@@ -247,12 +340,29 @@ export default function PageProduct() {
 
     const handleLike = async () => {
         setFormError(null);
+        if (!user) {
+            navigate("/login", { replace: true });
+            return;
+        }
+
         try {
             await toggleLike(productcode);
         } catch (likeError) {
             const message =
                 likeError instanceof Error ? likeError.message : "Like kon niet opgeslagen worden.";
             setFormError(message);
+        }
+    };
+
+    const handleShare = async () => {
+        const shareUrl = `${window.location.origin}/cannabis/${productcode}`;
+        const result = await shareLink({
+            title: product?.data.title ?? "Cannabis product",
+            text: `Bekijk ${product?.data.title ?? "dit product"}`,
+            url: shareUrl,
+        });
+        if (result === "copied") {
+            window.alert("Link gekopieerd.");
         }
     };
 
@@ -283,6 +393,22 @@ export default function PageProduct() {
         }
     };
 
+    const handleReviewDelete = async () => {
+        setFormError(null);
+        setRemovingReview(true);
+        try {
+            await deleteReview(productcode);
+        } catch (deleteError) {
+            const message =
+                deleteError instanceof Error
+                    ? deleteError.message
+                    : "Review kon niet verwijderd worden.";
+            setFormError(message);
+        } finally {
+            setRemovingReview(false);
+        }
+    };
+
     return (
         <section className="product-container" style={{ paddingBottom: 90 }}>
             <Typography variant="h6" sx={{ color: "text.secondary", fontWeight: 600 }} onClick={openProductOverviewPage}>
@@ -306,17 +432,15 @@ export default function PageProduct() {
                     label={strainLabel}
                     variant="outlined"
                 />
-                <IconButton aria-label="share">
+                <IconButton aria-label="share" onClick={() => { void handleShare(); }}>
                     <ShareIcon />
                 </IconButton>
-                {user && (
-                    <IconButton aria-label="add to favorites" onClick={handleLike}>
-                        {isProductLiked(productcode) ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
-                    </IconButton>
-                )}
+                <IconButton aria-label="add to favorites" onClick={() => { void handleLike(); }}>
+                    {isProductLiked(productcode) ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
+                </IconButton>
 
                 <Typography variant="body1" sx={{ color: "text.secondary" }}>
-                    <img src={product?.data.images.main} alt={product?.data.title} style={{ maxWidth: "100%" }} />
+                    <img src={productImageToShow} alt={product?.data.title} style={{ maxWidth: "100%" }} />
                 </Typography>
             </section>
 
@@ -351,41 +475,100 @@ export default function PageProduct() {
                 {tasteNames}
             </section>
 
-            {user ? (
-                <section style={{ margin: 30, textAlign: "left" }}>
-                    <Typography variant="h6" sx={{ color: "text.secondary", fontWeight: 600 }}>
-                        Jouw review
-                    </Typography>
-                    {!navigator.onLine && (
-                        <Alert severity="warning" sx={{ mb: 2 }}>
-                            Reviews opslaan kan alleen wanneer je online bent.
-                        </Alert>
-                    )}
-                    <form onSubmit={handleReviewSubmit}>
-                        <Rating
-                            value={reviewRating}
-                            onChange={(_, value) => setReviewRating(value ?? 1)}
-                            max={5}
-                        />
-                        <TextField
-                            fullWidth
-                            multiline
-                            minRows={3}
-                            label="Jouw ervaring"
-                            value={reviewText}
-                            onChange={(event) => setReviewText(event.target.value)}
-                            sx={{ mt: 1, mb: 1 }}
-                        />
-                        <Button type="submit" variant="contained" disabled={savingReview || !navigator.onLine}>
-                            {savingReview ? "Opslaan..." : "Review opslaan"}
-                        </Button>
-                    </form>
-                </section>
-            ) : (
-                <Typography variant="body2" sx={{ color: "text.secondary", margin: 3 }}>
-                    Log in om soortjes te liken en reviews te plaatsen.
+            <section style={{ margin: 16, textAlign: "left" }}>
+                <Typography variant="h6" sx={{ color: "text.secondary", fontWeight: 600, mb: 1 }}>
+                    Reviews
                 </Typography>
-            )}
+                {!productReviews.length ? (
+                    <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+                        Nog geen reviews geplaatst.
+                    </Typography>
+                ) : (
+                    <Stack spacing={1.2} sx={{ mb: 1.5 }}>
+                        {displayedReviews.map((item) => (
+                            <Card key={item.id} sx={{ borderRadius: 2 }}>
+                                <CardContent sx={{ pt: 1.2, pb: "12px !important" }}>
+                                    <ProductRating rating={item.rating} />
+                                    <Typography variant="subtitle2" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                                        {item.userName}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                                        {item.review}
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        ))}
+                    </Stack>
+                )}
+                {productReviews.length > 5 && (
+                    <Button
+                        variant="text"
+                        onClick={() => setShowAllReviews((prev) => !prev)}
+                        sx={{ mb: 1.5 }}
+                    >
+                        {showAllReviews ? "Minder tonen" : `Meer tonen (${productReviews.length - 5})`}
+                    </Button>
+                )}
+
+                {user ? (
+                    <>
+                        <Typography variant="h6" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                            Jouw review
+                        </Typography>
+                        {!navigator.onLine && (
+                            <Alert severity="warning" sx={{ mb: 2 }}>
+                                Reviews aanpassen kan alleen wanneer je online bent.
+                            </Alert>
+                        )}
+                        {myReview ? (
+                            <Card sx={{ borderRadius: 2 }}>
+                                <CardContent>
+                                    <ProductRating rating={myReview.rating} />
+                                    <Typography variant="body2" sx={{ color: "text.secondary", mb: 1 }}>
+                                        {myReview.review}
+                                    </Typography>
+                                    <Button
+                                        variant="outlined"
+                                        color="error"
+                                        disabled={!navigator.onLine || removingReview}
+                                        onClick={() => { void handleReviewDelete(); }}
+                                    >
+                                        {removingReview ? "Verwijderen..." : "Review verwijderen"}
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <form onSubmit={handleReviewSubmit}>
+                                <MuiRating
+                                    value={reviewRating}
+                                    onChange={(_, value) => setReviewRating(value ?? 1)}
+                                    onChangeActive={(_, value) => setReviewHover(value)}
+                                    max={5}
+                                    IconContainerComponent={ReviewIconContainer}
+                                    getLabelText={(value: number) => (reviewIcons[value] ?? fallbackReviewIcon).label}
+                                    highlightSelectedOnly
+                                />
+                                <TextField
+                                    fullWidth
+                                    multiline
+                                    minRows={3}
+                                    label="Jouw ervaring"
+                                    value={reviewText}
+                                    onChange={(event) => setReviewText(event.target.value)}
+                                    sx={{ mt: 1, mb: 1 }}
+                                />
+                                <Button type="submit" variant="contained" disabled={savingReview || !navigator.onLine}>
+                                    {savingReview ? "Opslaan..." : "Review opslaan"}
+                                </Button>
+                            </form>
+                        )}
+                    </>
+                ) : (
+                    <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+                        Log in om je eigen review toe te voegen.
+                    </Typography>
+                )}
+            </section>
         </section>
     );
 }

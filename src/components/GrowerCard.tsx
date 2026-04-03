@@ -1,6 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { GrowerType } from "../types/grower";
+import { useSignedMediaUrl } from "../hooks/useSignedMediaUrl";
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
 import CardHeader from '@mui/material/CardHeader';
@@ -13,6 +14,7 @@ type Props = {
 
 const GrowerCard = ({ grower }: Props) => {
     const navigate = useNavigate();
+    const thumbnailUrl = useSignedMediaUrl(grower?.thumbnailUrl);
     if(grower === undefined) return (<></>)
 
     const openGrowerPage = (grower: GrowerType) => {
@@ -31,7 +33,7 @@ const GrowerCard = ({ grower }: Props) => {
             <CardMedia
                 component="img"
                 height="120"
-                image={grower.thumbnailUrl}
+                image={thumbnailUrl || grower.thumbnailUrl}
                 alt={grower.title}
                 sx={{ objectFit: "scale-down"}}
             />

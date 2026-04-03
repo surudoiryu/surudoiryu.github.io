@@ -8,6 +8,8 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ShareIcon from '@mui/icons-material/Share';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ProductenPerMerk from "./components/BrandProducts";
+import { useSignedMediaUrl } from "./hooks/useSignedMediaUrl";
+import { shareLink } from "./services/share";
 
 export default function PageGrower() {
     const navigate = useNavigate();
@@ -16,6 +18,7 @@ export default function PageGrower() {
 
     const [grower, setGrower] = useState<{ id: string; data: GrowerType } | null>(null)
     const [loading, setLoading] = useState(true)
+    const growerLogoUrl = useSignedMediaUrl(grower?.data?.images?.logo || grower?.data?.thumbnailUrl);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(brandCollectionRef, async (snapshot) => {
@@ -46,6 +49,18 @@ export default function PageGrower() {
         navigate(`/telers`, { replace: true });
     }
 
+    const handleShare = async () => {
+        const shareUrl = `${window.location.origin}/telers/${growercode}`;
+        const result = await shareLink({
+            title: grower?.data.title ?? "Teler",
+            text: `Bekijk ${grower?.data.title ?? "deze teler"}`,
+            url: shareUrl,
+        });
+        if (result === "copied") {
+            window.alert("Link gekopieerd.");
+        }
+    };
+
     return (
         <section className="product-container">
             <Typography variant="h6" sx={{ color: 'text.secondary', fontWeight: 600 }} onClick={() => openGrowerOverviewPage()}>
@@ -53,7 +68,7 @@ export default function PageGrower() {
             </Typography>
 
             <section id="headerInfo" style={{ textAlign: 'left', margin: 30 }}>
-                <IconButton aria-label="share">
+                <IconButton aria-label="share" onClick={() => { void handleShare(); }}>
                     <ShareIcon />
                 </IconButton>
                 <IconButton aria-label="add to favorites">
@@ -64,7 +79,7 @@ export default function PageGrower() {
                     {grower?.data.title}
                 </Typography>
                 <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-                    <img src={grower?.data.images.logo} alt={grower?.data.title} style={{ maxWidth: "100%" }} />
+                    <img src={growerLogoUrl || grower?.data.images.logo} alt={grower?.data.title} style={{ maxWidth: "100%" }} />
                 </Typography>
                 
             </section>

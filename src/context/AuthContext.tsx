@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import {
     createUserWithEmailAndPassword,
+    deleteUser,
     onAuthStateChanged,
     signInWithEmailAndPassword,
     signOut,
@@ -8,9 +9,8 @@ import {
     User,
 } from "firebase/auth";
 import {
-    arrayRemove,
-    arrayUnion,
     collection,
+    deleteDoc,
     doc,
     onSnapshot,
     query,
@@ -48,6 +48,7 @@ type AuthContextValue = {
     logout: () => Promise<void>;
     toggleLike: (productShortcode: string) => Promise<void>;
     saveReview: (input: ReviewInput) => Promise<void>;
+    deleteReview: (productShortcode: string) => Promise<void>;
     setPushEnabled: (enabled: boolean) => Promise<void>;
     updateProfileDetails: (input: {
         displayName?: string;
@@ -77,7 +78,7 @@ const buildDefaultProfile = (currentUser: User): UserProfile => {
 };
 
 const ensureProfileDoc = async (currentUser: User) => {
-    const profileRef = doc(db, "users", currentUser.uid);
+    const profileRef = doc(db, "Gebruikers", currentUser.uid);
     const existingProfile = await getDoc(profileRef);
     if (!existingProfile.exists()) {
         const defaultProfile = buildDefaultProfile(currentUser);
@@ -115,7 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return;
         }
 
-        const profileRef = doc(db, "users", user.uid);
+        const profileRef = doc(db, "Gebruikers", user.uid);
         ensureProfileDoc(user).catch((error) => {
             console.warn("Profieldocument kon niet automatisch worden aangemaakt.", error);
         });
@@ -160,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(credential.user, { displayName: name });
         try {
-            await setDoc(doc(db, "users", credential.user.uid), {
+            await setDoc(doc(db, "Gebruikers", credential.user.uid), {
                 uid: credential.user.uid,
                 email,
                 displayName: name,
@@ -174,7 +175,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 updatedAt: serverTimestamp(),
             });
         } catch (error) {
-            console.warn("Gebruiker is aangemaakt, maar profile write mislukte tijdens registratie.", error);
+            try {
+                await deleteUser(credential.user);
+            } catch (cleanupError) {
+                console.error("Opschonen van auth-user na mislukte profielwrite mislukte.", cleanupError);
+            }
+            throw new Error("Registratie mislukt: profiel kon niet in Firestore worden opgeslagen.");
         }
     };
 
@@ -194,17 +200,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error("Log in om soortjes te liken.");
         }
 
+        const normalizedShortcode = productShortcode?.trim();
+        if (!normalizedShortcode) {
+            throw new Error("Dit product kan niet geliket worden omdat er geen shortcode beschikbaar is.");
+        }
+
         if (!navigator.onLine) {
             throw new Error("Likes bijwerken kan alleen wanneer je online bent.");
         }
 
-        const isLiked = profile.likedProducts.includes(productShortcode);
+        const userRef = doc(db, "Gebruikers", user.uid);
+        const currentLiked = Array.isArray(profile.likedProducts) ? profile.likedProducts : [];
+        const uniqueLiked = Array.from(new Set(currentLiked.filter(Boolean)));
+        const isLiked = uniqueLiked.includes(normalizedShortcode);
+
+        const nextLiked = isLiked
+            ? uniqueLiked.filter((item) => item !== normalizedShortcode)
+            : [...uniqueLiked, normalizedShortcode];
+
         await setDoc(
-            doc(db, "users", user.uid),
+            userRef,
             {
-                likedProducts: isLiked
-                    ? arrayRemove(productShortcode)
-                    : arrayUnion(productShortcode),
+                likedProducts: nextLiked,
                 updatedAt: serverTimestamp(),
             },
             { merge: true }
@@ -220,21 +237,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             throw new Error("Reviews plaatsen kan alleen wanneer je online bent.");
         }
 
+        if (reviews.some((item) => item.productShortcode === input.productShortcode)) {
+            throw new Error("Je hebt al een review geplaatst. Verwijder die eerst.");
+        }
+
         const reviewId = `${user.uid}_${input.productShortcode}`;
-        await setDoc(
-            doc(db, "reviews", reviewId),
-            {
-                userId: user.uid,
-                userName: profile.displayName,
-                productShortcode: input.productShortcode,
-                productTitle: input.productTitle,
-                rating: input.rating,
-                review: input.review,
-                updatedAt: serverTimestamp(),
-                createdAt: serverTimestamp(),
-            },
-            { merge: true }
-        );
+        const reviewRef = doc(db, "reviews", reviewId);
+        await setDoc(reviewRef, {
+            userId: user.uid,
+            userName: profile.displayName,
+            productShortcode: input.productShortcode,
+            productTitle: input.productTitle,
+            rating: input.rating,
+            review: input.review,
+            updatedAt: serverTimestamp(),
+            createdAt: serverTimestamp(),
+        });
+    };
+
+    const deleteReview = async (productShortcode: string) => {
+        if (!user) {
+            throw new Error("Log in om reviews te verwijderen.");
+        }
+
+        if (!navigator.onLine) {
+            throw new Error("Reviews verwijderen kan alleen wanneer je online bent.");
+        }
+
+        const reviewId = `${user.uid}_${productShortcode}`;
+        await deleteDoc(doc(db, "reviews", reviewId));
     };
 
     const setPushEnabled = async (enabled: boolean) => {
@@ -254,7 +285,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         await setDoc(
-            doc(db, "users", user.uid),
+            doc(db, "Gebruikers", user.uid),
             {
                 pushEnabled: enabled,
                 updatedAt: serverTimestamp(),
@@ -290,7 +321,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (input.headerImageUrl !== undefined) payload.headerImageUrl = input.headerImageUrl;
         if (input.bio !== undefined) payload.bio = input.bio;
 
-        await setDoc(doc(db, "users", user.uid), payload, { merge: true });
+        await setDoc(doc(db, "Gebruikers", user.uid), payload, { merge: true });
     };
 
     const isProductLiked = (productShortcode: string) =>
@@ -306,6 +337,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         toggleLike,
         saveReview,
+        deleteReview,
         setPushEnabled,
         updateProfileDetails,
         isProductLiked,

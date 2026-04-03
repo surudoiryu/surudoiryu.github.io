@@ -1,6 +1,9 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { ProductType } from "../types/product";
+import { useSignedMediaUrl } from "../hooks/useSignedMediaUrl";
+import { useAuth } from "../context/AuthContext";
+import { shareLink } from "../services/share";
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import Card from '@mui/material/Card';
@@ -8,6 +11,7 @@ import CardHeader from '@mui/material/CardHeader';
 import CardMedia from '@mui/material/CardMedia';
 import CardContent from '@mui/material/CardContent';
 import ShareIcon from '@mui/icons-material/Share';
+import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import Chip from '@mui/material/Chip';
 import BoltIcon from '@mui/icons-material/Bolt';
@@ -23,6 +27,15 @@ type Props = {
 
 const ProductCard = ({ product }: Props) => {
     const navigate = useNavigate();
+    const rawImageSource =
+        product?.thumbnailUrl ||
+        product?.images?.main ||
+        product?.images?.close ||
+        product?.images?.mood ||
+        "";
+    const thumbnailUrl = useSignedMediaUrl(rawImageSource);
+    const imageToShow = thumbnailUrl || rawImageSource || "/android-chrome-192x192.png";
+    const { user, isProductLiked, toggleLike } = useAuth();
     if (product === undefined) return (<></>)
     //const brand: GrowerType = product.brand as GrowerType
 
@@ -35,17 +48,45 @@ const ProductCard = ({ product }: Props) => {
         }
     }
 
+    const handleShare = async (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+        const shareUrl = `${window.location.origin}/cannabis/${product.shortcode}`;
+        const result = await shareLink({
+            title: product.title,
+            text: `Bekijk ${product.title}`,
+            url: shareUrl,
+        });
+        if (result === "copied") {
+            window.alert("Link gekopieerd.");
+        }
+    };
+
+    const handleLike = async (event: React.MouseEvent<HTMLButtonElement>) => {
+        event.stopPropagation();
+
+        if (!user) {
+            navigate("/login", { replace: true });
+            return;
+        }
+
+        try {
+            await toggleLike(product.shortcode);
+        } catch (error) {
+            console.warn("Like kon niet opgeslagen worden.", error);
+        }
+    };
+
     return (
         <Card sx={{height: '100%'}}>
             <CardHeader
                 sx={{ textAlign: 'left' }}
                 action={
                     <>
-                        <IconButton aria-label="share">
+                        <IconButton aria-label="share" onClick={handleShare}>
                             <ShareIcon />
                         </IconButton>
-                        <IconButton aria-label="add to favorites">
-                            <FavoriteBorderIcon />
+                        <IconButton aria-label="add to favorites" onClick={handleLike}>
+                            {isProductLiked(product.shortcode) ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
                         </IconButton>
                     </>
                 }
@@ -54,7 +95,7 @@ const ProductCard = ({ product }: Props) => {
             <CardMedia
                 component="img"
                 height="230"
-                image={product.thumbnailUrl}
+                image={imageToShow}
                 alt={product.title}
                 sx={{ objectFit: "scale-down" }}
                 onClick={() => openProductPage(product)}

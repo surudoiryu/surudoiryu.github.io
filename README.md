@@ -53,7 +53,7 @@ Gebruik in `.env` minimaal:
 - alternatief: `REACT_APP_GRAPHQL_HOST` + `REACT_APP_GRAPHQL_PATH`
 - optioneel auth: `REACT_APP_GRAPHQL_AUTH_TOKEN` (Bearer) of `REACT_APP_GRAPHQL_API_KEY`
 
-De frontend leest catalogusdata (Producten/Brands/Shops) uit Firestore.
+De frontend leest catalogusdata (Producten/Brands/Shops) en systeemdata (Terpenes/Tastes/Effects/Categories/SubCategories) uit Firestore.
 
 ## Catalog Sync Worker
 
@@ -87,26 +87,45 @@ Dit script staat in:
 
 - `scripts/catalog-sync-worker.mjs`
 
-### 3) Cron (elk uur)
+### 2b) Firestore Bootstrap (Gebruikers/reviews)
 
-Linux/macOS `crontab -e` voorbeeld:
+Als `Gebruikers` en `reviews` nog niet zichtbaar zijn in Firestore, kun je een eenmalige bootstrap draaien:
+
+```bash
+npm run migrate:firestore
+```
+
+Dit script:
+
+- maakt `Gebruikers/bootstrap` aan
+- maakt `reviews/bootstrap` aan
+- zet `AppConfig/firestoreSchema` met vereiste collecties
+- deployt daarna automatisch `firestore.rules` naar je Firebase project
+
+Bestand:
+
+- `scripts/firestore-bootstrap.mjs`
+
+### 3) Cron (1x per dag)
+
+Linux/macOS `crontab -e` voorbeeld (dagelijks om 03:00):
 
 ```cron
-0 * * * * cd /path/to/surudoiryu.github.io && /usr/bin/npm run sync:catalog >> /var/log/catalog-sync.log 2>&1
+0 3 * * * cd /path/to/surudoiryu.github.io && /usr/bin/npm run sync:catalog >> /var/log/catalog-sync.log 2>&1
 ```
 
 Windows (Task Scheduler) equivalent:
 
-1. Maak een taak met trigger: "Every 1 hour".
+1. Maak een taak met trigger: "Daily" (bijv. 03:00).
 2. Action:
    - Program: `powershell.exe`
    - Arguments: `-NoProfile -Command "cd 'E:\Freelance Werk\5. Intern\surudoiryu.github.io'; npm run sync:catalog"`
 
 ### 4) Firestore Rules (aanbevolen model)
 
-- Client app: read-only op `Producten`, `Brands`, `Shops`, `SyncStatus`.
+- Client app: read-only op `Producten`, `Brands`, `Shops`, `Terpenes`, `Tastes`, `Effects`, `Categories`, `SubCategories`, `SyncStatus`.
 - Worker/service account: write op deze collecties.
-- User data (`users`, `reviews`, likes): directe client writes volgens auth rules.
+- User data (`Gebruikers`, `reviews`, likes): directe client writes volgens auth rules.
 
 Concreet staat dit in:
 
@@ -120,8 +139,14 @@ Voorbeeld met Firebase CLI:
 firebase deploy --only firestore:rules
 ```
 
+Of via projectscript:
+
+```bash
+npm run deploy:firestore:rules
+```
+
 Belangrijk:
 
-- Registreren blijft direct schrijven naar `users/{uid}`.
+- Registreren blijft direct schrijven naar `Gebruikers/{uid}`.
 - Reviews plaatsen blijft direct schrijven naar `reviews/{reviewId}`.
-- Catalogus (`Producten`/`Brands`/`Shops`) wordt alleen via worker bijgewerkt.
+- Catalogus (`Producten`/`Brands`/`Shops`) en systeemdata (`Terpenes`/`Tastes`/`Effects`/`Categories`/`SubCategories`) worden alleen via worker bijgewerkt.
