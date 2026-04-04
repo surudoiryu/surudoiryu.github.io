@@ -1,4 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /aanmelden
+Disallow: /profiel
 
 Sitemap: https://weedinfo.nl/sitemap.xml
