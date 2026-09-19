@@ -5,18 +5,13 @@ import App from './App';
 import reportWebVitals from './reportWebVitals';
 import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 import { onSuccess, onUpdate } from "./registrationStatus";
-import PWAPrompt from 'react-ios-pwa-prompt';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
 );
 root.render(
   <React.StrictMode>
-      <App />
-    <PWAPrompt
-      promptOnVisit={1}
-      timesToShow={3}
-    />
+    <App />
   </React.StrictMode>
 );
 

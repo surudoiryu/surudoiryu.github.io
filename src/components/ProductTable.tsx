@@ -1,14 +1,15 @@
 import React from "react";
 import { ProductType } from "../types/product";
 import { ProductEnum } from "../longProcesses/enums";
-import { useSignedMediaUrl } from "../hooks/useSignedMediaUrl";
+import { productMainImageUrl, MEDIA_PLACEHOLDER, mediaFallback } from "../utils/mediaSource";
 
 type Props = {
     list: Array<ProductType>;
 };
 
 function ProductTableRow({ item, index }: { item: ProductType; index: number }) {
-    const thumbnailUrl = useSignedMediaUrl(item?.thumbnailUrl);
+    const thumbnailUrl = productMainImageUrl(item) || MEDIA_PLACEHOLDER;
+    const onImageError = mediaFallback();
 
     return (
         <tr key={item?.id}>
@@ -18,11 +19,12 @@ function ProductTableRow({ item, index }: { item: ProductType; index: number }) 
             <td>{item?.type}</td>
             <td>
                 <img
-                    src={thumbnailUrl || item?.thumbnailUrl}
+                    src={thumbnailUrl}
                     alt={item?.title}
                     width={50}
                     height={50}
                     loading="lazy"
+                    onError={onImageError}
                 />
             </td>
         </tr>

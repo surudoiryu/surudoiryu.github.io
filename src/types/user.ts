@@ -24,6 +24,9 @@ export type ProductReview = {
     productTitle: string;
     rating: number;
     review: string;
+    reactions?: Record<string, "up" | "down">;
+    upVotes?: number;
+    downVotes?: number;
     createdAt?: Timestamp;
     updatedAt?: Timestamp;
 };

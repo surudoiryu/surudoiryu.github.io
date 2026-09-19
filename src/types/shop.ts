@@ -17,6 +17,24 @@ export type ShopType = {
     distance: number;
     shortcode: string;
     description?: string;
+    province?: string;
+    country?: string;
+    openingHours?: {
+        version?: number;
+        days?: Array<{
+            day: string;
+            open?: string;
+            close?: string;
+            closed?: boolean;
+        }>;
+    };
+    gallery?: string[];
+    images?: {
+        logo?: string;
+        overview?: string;
+        close?: string;
+        mood?: string;
+    };
     growers?: Array<number>;
     products?: Array<number>;
     isApproved?: boolean;

@@ -9,30 +9,37 @@
     height: 100%;
 }
 
-.highlighted {
-    position: absolute;
-    bottom: 60px;
-    left: 0;
-    right: 0;
-    margin: auto;
-    max-width: fit-content;
-    /* card style */
-    background-color: #000;
-    padding: 10px;
-    border-radius: 5px;
-    /* text style */
-    color: #fff;
-    font-size: 1rem;
-    text-align: center;
-    /* animation */
-    animation: 400ms reveal forwards;
+.map-shop-popup-card {
+    width: min(320px, 78vw);
+    transform: translate(-42%, calc(-100% - 6px));
+    border-radius: 12px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+    animation: 240ms reveal forwards;
 }
 
-.highlighted button {
-    font-size: 1rem;
-    color: rgb(255, 255, 107);
-    background-color: transparent;
-    border: 0;
-    padding: 4px;
-    cursor: pointer;
+.map-shop-popup-card::after {
+    content: "";
+    position: absolute;
+    left: 42%;
+    bottom: -10px;
+    transform: translateX(-50%);
+    border-width: 10px 10px 0 10px;
+    border-style: solid;
+    border-color: #fff transparent transparent transparent;
+}
+
+.map-shop-popup-close {
+    position: absolute !important;
+    right: 4px;
+    top: 4px;
+}
+
+.map-shop-mobile-sheet {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: 68px;
+    z-index: 1300;
+    border-radius: 14px;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
 }

@@ -4,23 +4,28 @@ import React from 'react'
 interface MarkerProps {
     className?: string
     image?: string
+    label?: string
+    pinColor?: string
     draggable: boolean
     background?: boolean
     lat: number
     lng: number
     markerId: string
     onClick?: (
-        e: React.MouseEvent<HTMLImageElement, MouseEvent>,
+        e: React.MouseEvent<HTMLElement, MouseEvent>,
         props: { lat: number; lng: number; markerId: string },
     ) => void
-    onDrag?: (e: React.MouseEvent<HTMLImageElement, MouseEvent>, props: { latLng: LatLngLiteral }) => void
-    onDragEnd?: (e: React.MouseEvent<HTMLImageElement, MouseEvent>, props: { latLng: LatLngLiteral }) => void
-    onDragStart?: (e: React.MouseEvent<HTMLImageElement, MouseEvent>, props: { latLng: LatLngLiteral }) => void
+    onDrag?: (e: React.MouseEvent<HTMLElement, MouseEvent>, props: { latLng: LatLngLiteral }) => void
+    onDragEnd?: (e: React.MouseEvent<HTMLElement, MouseEvent>, props: { latLng: LatLngLiteral }) => void
+    onDragStart?: (e: React.MouseEvent<HTMLElement, MouseEvent>, props: { latLng: LatLngLiteral }) => void
+    children?: React.ReactNode
 }
 
 const Marker = ({
     className,
     image,
+    label,
+    pinColor = "#2e7d32",
     lat,
     lng,
     markerId,
@@ -33,9 +38,19 @@ const Marker = ({
     onDragEnd,
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     onDragStart,
+    children,
     ...props
 }: MarkerProps) =>
-    lat && lng && image ? (
+    lat && lng && children ? (
+        <div
+            className={className}
+            onClick={(e) => (onClick ? onClick(e, { markerId, lat, lng }) : null)}
+            style={{ cursor: background ? "pointer" : "grab" }}
+            {...props}
+        >
+            {children}
+        </div>
+    ) : lat && lng && image ? (
         <img
             className={className}
             src={`${image}`}
@@ -48,6 +63,30 @@ const Marker = ({
             height={50}
             {...props}
         />
+    ) : lat && lng && label ? (
+        <div
+            className={className}
+            onClick={(e) => (onClick ? onClick(e, { markerId, lat, lng }) : null)}
+            style={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                backgroundColor: pinColor,
+                color: "#fff",
+                fontSize: 14,
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: (background) ? "pointer" : "grab",
+                border: "2px solid #fff",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.35)",
+                userSelect: "none",
+            }}
+            {...props}
+        >
+            {label}
+        </div>
     ) : null
 
 export default Marker

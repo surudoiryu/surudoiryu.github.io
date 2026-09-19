@@ -14,5 +14,7 @@ export const graphQlEndpoint = rawEndpoint
         ? `${graphQlHost.replace(/\/$/, "")}${graphQlPath.startsWith("/") ? graphQlPath : `/${graphQlPath}`}`
         : "";
 
-export const graphQlAuthToken = (env.REACT_APP_GRAPHQL_AUTH_TOKEN ?? "").trim();
-export const graphQlApiKey = (env.REACT_APP_GRAPHQL_API_KEY ?? "").trim();
+// Authentication for VerdiQ is server-only. Browser builds must never receive
+// bearer tokens or API keys; authenticated operations require an SSR/API proxy.
+export const graphQlAuthToken = "";
+export const graphQlApiKey = "";

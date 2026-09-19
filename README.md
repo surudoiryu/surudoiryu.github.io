@@ -51,7 +51,8 @@ Gebruik in `.env` minimaal:
 
 - `REACT_APP_GRAPHQL_ENDPOINT` (bijv. `http://localhost:4000/graphql`)
 - alternatief: `REACT_APP_GRAPHQL_HOST` + `REACT_APP_GRAPHQL_PATH`
-- optioneel auth: `REACT_APP_GRAPHQL_AUTH_TOKEN` (Bearer) of `REACT_APP_GRAPHQL_API_KEY`
+- Browsercode ontvangt nooit GraphQL tokens/API-keys. Authenticated VerdiQ-verkeer loopt uitsluitend via de server/syncworker met Secret Manager-configuratie.
+- optioneel analytics: `REACT_APP_GTM_ID` (bijv. `GTM-XXXXXXX`)
 
 De frontend leest catalogusdata (Producten/Brands/Shops) en systeemdata (Terpenes/Tastes/Effects/Categories/SubCategories) uit Firestore.
 

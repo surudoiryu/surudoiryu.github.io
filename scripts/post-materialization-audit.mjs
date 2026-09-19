@@ -1,0 +1,35 @@
+import admin from "firebase-admin";
+import fs from "node:fs";
+import http from "node:http";
+import { createCatalogHandler } from "../server/catalog-app.mjs";
+import { createFirestorePublicRepository } from "../server/firestore-public-repository.mjs";
+import { encodeRoute } from "../server/entity-model.mjs";
+
+for (const file of [".env.worker", ".env"]) if (fs.existsSync(file)) for (const line of fs.readFileSync(file, "utf8").split(/\r?\n/)) { const match = line.match(/^\s*([A-Za-z_][\w]*)\s*=\s*(.*)$/); if (match && !process.env[match[1]]) process.env[match[1]] = match[2].replace(/^['"]|['"]$/g, ""); }
+if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.applicationDefault(), ...(process.env.FIREBASE_PROJECT_ID ? { projectId: process.env.FIREBASE_PROJECT_ID } : {}) });
+const db = admin.firestore(); const config = (await db.collection("PublicConfig").doc("catalog").get()).data(); const generationId = config?.activeGenerationId;
+if (!generationId) throw new Error("No active Public generation");
+const root = db.collection("PublicGenerations").doc(generationId); const [productSnap, growerSnap, shopSnap, routeSnap] = await Promise.all([root.collection("Products").get(), root.collection("Growers").get(), root.collection("Shops").get(), root.collection("Routes").get()]);
+const products = productSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })); const growers = growerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })); const routes = new Map(routeSnap.docs.map((doc) => [doc.id, doc.data()])); const growerIds = new Set(growers.map((item) => item.id));
+const canonicals = products.map((item) => item.effective.canonicalPath); const failures = [];
+const check = (condition, reason) => { if (!condition) failures.push(reason); };
+check(products.length === 458, "product_count"); check(growers.length === 9, "grower_count"); check(shopSnap.size === 0, "shops_present");
+check(products.every((item) => item.id === item.sourceId && item.publicId === `verdiq:product:${item.id}`), "product_identity");
+check(products.every((item) => growerIds.has(item.growerSourceId) && item.growerPublicId === `verdiq:grower:${item.growerSourceId}`), "grower_relation");
+check(new Set(canonicals).size === 458, "canonical_uniqueness"); check(products.every((item) => item.sourceStatus === "active") && growers.every((item) => item.sourceStatus === "active"), "stale_entity");
+check(products.every((item) => !(item.shopPublicIds || []).length), "availability_leak");
+check([...products, ...growers].every((item) => item.provenance && item.editorial && item.seoOverride && item.source), "provenance_contract");
+check([...products, ...growers].every((item) => item.effective.indexable === (item.indexStatus === "index,follow")), "index_readiness");
+for (const product of products) { const canonical = routes.get(encodeRoute(product.effective.canonicalPath)); const qr = routes.get(encodeRoute(product.qrPath)); check(canonical?.kind === "entity" && canonical?.sourceId === product.id, `canonical:${product.id}`); check(qr?.kind === "redirect" && qr?.qr && qr?.destination === product.effective.canonicalPath, `qr:${product.id}`); }
+const redirectRows = [...routes.values()].filter((item) => item.kind === "redirect" && !item.qr); const redirectDestinations = new Set(redirectRows.map((item) => item.destination)); const redirectSources = new Set([...routes].filter(([, item]) => item.kind === "redirect" && !item.qr).map(([id]) => decodeURIComponent(id)));
+check(!redirectRows.some((item) => redirectSources.has(item.destination)), "redirect_chain"); check(!redirectRows.some((item) => redirectDestinations.has(item.destination) && redirectSources.has(item.destination)), "redirect_loop");
+const repository = createFirestorePublicRepository(db); const server = http.createServer(createCatalogHandler(repository)); await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve)); const origin = `http://127.0.0.1:${server.address().port}`;
+const named = (name) => products.filter((item) => item.effective.title.toLocaleLowerCase("nl") === name.toLocaleLowerCase("nl"));
+const excluded = new Set([...named("Super Silver Sweets"), ...named("Exodus Cheese"), ...named("test2")].map((item) => item.id)); const normal = products.filter((item) => !excluded.has(item.id)).slice(0, 2);
+const sample = [...normal, ...named("Super Silver Sweets"), ...named("Exodus Cheese"), ...named("test2"), ...growers.slice(0, 2)]; const smoke = [];
+for (const entity of sample) { const response = await fetch(`${origin}${entity.effective.canonicalPath}`, { redirect: "manual" }); const html = await response.text(); const result = { id: entity.id, path: entity.effective.canonicalPath, status: response.status, title: /<title>[^<]+<\/title>/i.test(html), metaDescription: /<meta name="description" content="[^"]+"/i.test(html), h1: /<h1[^>]*>[^<]+<\/h1>/i.test(html), canonical: html.includes(`rel="canonical" href="https://weedinfo.nl${entity.effective.canonicalPath}"`), jsonLd: /<script type="application\/ld\+json">/i.test(html), anchor: /<a href="\//i.test(html), robots: /<meta name="robots" content="(?:index|noindex),(?:follow|nofollow)"/i.test(html) }; result.ok = result.status === 200 && Object.entries(result).filter(([key]) => !["id", "path", "status", "ok"].includes(key)).every(([, value]) => value); smoke.push(result); }
+const unknown = await fetch(`${origin}/cannabis/onbekend-product-dat-niet-bestaat`, { redirect: "manual" }); const qrProduct = named("test2")[0]; const qrResponse = await fetch(`${origin}${qrProduct.qrPath}`, { redirect: "manual" });
+await new Promise((resolve) => server.close(resolve));
+check(smoke.every((item) => item.ok), "ssr_smoke"); check(unknown.status === 404, "unknown_route"); check(qrResponse.status === 302 && qrResponse.headers.get("location") === qrProduct.effective.canonicalPath, "qr_http_roundtrip");
+const report = { generationId, counts: { PublicGrowers: growers.length, PublicProducts: products.length, PublicShops: shopSnap.size, Routes: routes.size, indexFollowProducts: products.filter((item) => item.indexStatus === "index,follow").length, noindexProducts: products.filter((item) => item.indexStatus !== "index,follow").length, indexFollowGrowers: growers.filter((item) => item.indexStatus === "index,follow").length, nonQrRedirects: redirectRows.length }, integrity: { duplicateCanonicals: products.length - new Set(canonicals).size, staleEntities: [...products, ...growers].filter((item) => item.sourceStatus !== "active").length, orphanedProducts: products.filter((item) => !growerIds.has(item.growerSourceId)).length, availabilityLeaks: products.filter((item) => (item.shopPublicIds || []).length).length, provenanceFailures: [...products, ...growers].filter((item) => !item.provenance || !item.source || !item.editorial || !item.seoOverride).length }, ssr: { samples: smoke, unknownStatus: unknown.status, qr: { path: qrProduct.qrPath, status: qrResponse.status, location: qrResponse.headers.get("location") } }, failures };
+console.log(JSON.stringify(report, null, 2)); if (failures.length) process.exitCode = 2;

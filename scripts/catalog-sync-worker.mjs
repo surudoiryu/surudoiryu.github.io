@@ -21,6 +21,7 @@ import admin from "firebase-admin";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verdiqShopIdentity } from "./shop-identity.mjs";
 
 const PRODUCTS_FILTERED_QUERY = `
 query ProductsFiltered($limit: Int, $offset: Int, $sortBy: String, $sortDir: String) {
@@ -113,12 +114,22 @@ query TenantsForCatalogSync {
     id
     businessName
     type
+    shortDescription
     companyAddress
+    warehouseAddresses
     logoMediaId
     isApproved
     vendorGLN
     billingEmail
     ordersEmail
+    allowForeigns
+    disabled
+    drive
+    easyParking
+    payByCard
+    pickup
+    openFrom
+    openTill
     createdAt
     updatedAt
   }
@@ -133,6 +144,34 @@ query SystemData {
   subCategories { id name description categoryId }
 }
 `;
+const CREATE_COMPANY_REVIEW_MUTATION = `
+mutation AddCompanyReview($input: CreateCompanyReviewInput!) {
+  createCompanyReview(input: $input) {
+    id
+    targetTenantId
+    rating
+    text
+    reviewerName
+    source
+    externalRef
+    createdAt
+  }
+}
+`;
+const CREATE_PRODUCT_REVIEW_MUTATION = `
+mutation AddProductReview($input: CreateProductReviewInput!) {
+  createProductReview(input: $input) {
+    id
+    targetProductId
+    rating
+    text
+    reviewerName
+    source
+    externalRef
+    createdAt
+  }
+}
+`;
 
 const GROWER_QUERY_CANDIDATES = [
     {
@@ -143,8 +182,18 @@ query TenantsForFrontend {
     id
     businessName
     type
+    shortDescription
     companyAddress
+    warehouseAddresses
     logoMediaId
+    allowForeigns
+    disabled
+    drive
+    easyParking
+    payByCard
+    pickup
+    openFrom
+    openTill
   }
 }
 `,
@@ -156,8 +205,8 @@ query TenantsForFrontend {
 query GrowersTenantsTitle {
   tenants {
     id
-    title
-    description
+    businessName
+    shortDescription
   }
 }
 `,
@@ -200,8 +249,18 @@ query TenantsForShops {
     id
     businessName
     type
+    shortDescription
     companyAddress
+    warehouseAddresses
     logoMediaId
+    allowForeigns
+    disabled
+    drive
+    easyParking
+    payByCard
+    pickup
+    openFrom
+    openTill
   }
 }
 `,
@@ -366,6 +425,359 @@ function splitCsv(value) {
 
 function safeArray(value) {
     return Array.isArray(value) ? value : [];
+}
+
+function uniqueStrings(values) {
+    return Array.from(
+        new Set(
+            safeArray(values)
+                .map((item) => String(item || "").trim())
+                .filter(Boolean)
+        )
+    );
+}
+
+function coerceBoolean(value, fallback = false) {
+    if (typeof value === "boolean") return value;
+    if (typeof value === "number") return value !== 0;
+    if (typeof value === "string") {
+        const normalized = value.trim().toLowerCase();
+        if (["true", "1", "yes", "ja"].includes(normalized)) return true;
+        if (["false", "0", "no", "nee"].includes(normalized)) return false;
+    }
+    return fallback;
+}
+
+function firstDefined(...values) {
+    for (const value of values) {
+        if (value !== undefined && value !== null) {
+            return value;
+        }
+    }
+    return undefined;
+}
+
+function toFiniteNumber(value) {
+    if (typeof value === "number") {
+        return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === "string") {
+        const parsed = Number.parseFloat(value.replace(",", "."));
+        return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+}
+
+
+function isValidLatitude(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= -90 && value <= 90;
+}
+
+function isValidLongitude(value) {
+    return typeof value === "number" && Number.isFinite(value) && value >= -180 && value <= 180;
+}
+
+function hasValidCoordinatesValues(lat, lng) {
+    return isValidLatitude(lat) && isValidLongitude(lng) && Math.abs(lat) > 0 && Math.abs(lng) > 0;
+}
+
+function normalizeCountry(value) {
+    const raw = firstNonEmptyString(value);
+    if (!raw) return "";
+    const normalized = raw.toLowerCase();
+    if (normalized === "nl" || normalized.includes("nederland") || normalized.includes("netherlands")) {
+        return "Nederland";
+    }
+    return raw;
+}
+
+const DUTCH_PROVINCES = [
+    "Drenthe",
+    "Flevoland",
+    "Friesland",
+    "Gelderland",
+    "Groningen",
+    "Limburg",
+    "Noord-Brabant",
+    "Noord-Holland",
+    "Overijssel",
+    "Utrecht",
+    "Zeeland",
+    "Zuid-Holland",
+];
+
+const DUTCH_PROVINCES_BY_KEY = DUTCH_PROVINCES.reduce((acc, province) => {
+    acc[province.toLowerCase()] = province;
+    return acc;
+}, {});
+
+function normalizeProvince(value) {
+    const raw = firstNonEmptyString(value);
+    if (!raw) return "";
+    const normalized = raw.toLowerCase().replace(/\s+/g, "-");
+    const direct = DUTCH_PROVINCES_BY_KEY[normalized];
+    if (direct) return direct;
+    const bySpace = DUTCH_PROVINCES.find((province) => province.toLowerCase().replace(/-/g, " ") === normalized.replace(/-/g, " "));
+    return bySpace || raw;
+}
+
+function detectProvinceFromAddressText(value) {
+    const text = String(value || "").toLowerCase();
+    if (!text.trim()) return "";
+    const found = DUTCH_PROVINCES.find((province) => {
+        const variants = [province.toLowerCase(), province.toLowerCase().replace(/-/g, " ")];
+        return variants.some((variant) => text.includes(variant));
+    });
+    return found || "";
+}
+
+function detectCountryFromAddressText(value) {
+    const text = String(value || "").toLowerCase();
+    if (!text.trim()) return "";
+    if (text.includes("nederland") || text.includes(" netherlands") || text.endsWith(" nl")) {
+        return "Nederland";
+    }
+    return "";
+}
+
+function parseWarehouseAddresses(value) {
+    if (Array.isArray(value)) {
+        return value;
+    }
+    if (typeof value !== "string" || !value.trim()) {
+        return [];
+    }
+
+    const raw = value.trim();
+    try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        // fallback hieronder met regex
+    }
+    return [];
+}
+
+function extractLatLngFromText(value) {
+    const text = String(value || "");
+    if (!text.trim()) return { lat: null, lng: null };
+
+    const labeled = text.match(/["']?lat["']?\s*[:=]\s*(-?\d+(?:[.,]\d+)?)\D+["']?(?:lng|lon|longitude)["']?\s*[:=]\s*(-?\d+(?:[.,]\d+)?)/i);
+    if (labeled) {
+        return {
+            lat: toFiniteNumber(labeled[1]),
+            lng: toFiniteNumber(labeled[2]),
+        };
+    }
+
+    const generic = text.match(/(-?\d{1,2}(?:[.,]\d+)?)\s*,\s*(-?\d{1,3}(?:[.,]\d+)?)/);
+    if (generic) {
+        return {
+            lat: toFiniteNumber(generic[1]),
+            lng: toFiniteNumber(generic[2]),
+        };
+    }
+
+    return { lat: null, lng: null };
+}
+
+function extractCoordinates(source, seed) {
+    const location = source?.location && typeof source.location === "object" ? source.location : {};
+    const companyAddress = source?.companyAddress && typeof source.companyAddress === "object" ? source.companyAddress : {};
+    const warehouseAddresses = parseWarehouseAddresses(source?.warehouseAddresses);
+    const firstWarehouse = warehouseAddresses.find((item) => item && typeof item === "object") || {};
+    const coordinates = Array.isArray(source?.coordinates) ? source.coordinates : [];
+    const companyAddressTextCoordinates = extractLatLngFromText(source?.companyAddress);
+    const warehouseTextCoordinates = extractLatLngFromText(source?.warehouseAddresses);
+
+    const latCandidate = firstDefined(
+        source?.lat,
+        source?.latitude,
+        location?.lat,
+        location?.latitude,
+        companyAddress?.lat,
+        companyAddress?.latitude,
+        firstWarehouse?.lat,
+        firstWarehouse?.latitude,
+        companyAddressTextCoordinates.lat,
+        warehouseTextCoordinates.lat,
+        coordinates.length >= 2 ? coordinates[1] : undefined
+    );
+
+    const lngCandidate = firstDefined(
+        source?.lng,
+        source?.longitude,
+        source?.lon,
+        location?.lng,
+        location?.longitude,
+        location?.lon,
+        companyAddress?.lng,
+        companyAddress?.longitude,
+        companyAddress?.lon,
+        firstWarehouse?.lng,
+        firstWarehouse?.longitude,
+        firstWarehouse?.lon,
+        companyAddressTextCoordinates.lng,
+        warehouseTextCoordinates.lng,
+        coordinates.length >= 2 ? coordinates[0] : undefined
+    );
+
+    const lat = toFiniteNumber(latCandidate);
+    const lng = toFiniteNumber(lngCandidate);
+
+    const resolvedLat = lat ?? toFiniteNumber(seed?.lat);
+    const resolvedLng = lng ?? toFiniteNumber(seed?.lng);
+
+    if (!hasValidCoordinatesValues(resolvedLat, resolvedLng)) {
+        return {
+            lat: 0,
+            lng: 0,
+            hasCoordinates: false,
+        };
+    }
+
+    return {
+        lat: resolvedLat,
+        lng: resolvedLng,
+        hasCoordinates: true,
+    };
+}
+
+function itemClosed(item) {
+    return Boolean(item?.closed) || !firstNonEmptyString(item?.open);
+}
+
+function parseOpeningSchedule(value) {
+    let raw = value;
+    if (typeof value === "string") {
+        const trimmed = value.trim();
+        if (trimmed.startsWith("{")) {
+            try {
+                raw = JSON.parse(trimmed);
+            } catch {
+                raw = value;
+            }
+        }
+    }
+
+    if (!raw || typeof raw !== "object") {
+        return null;
+    }
+
+    const days = Array.isArray(raw.days) ? raw.days : [];
+    if (!days.length) {
+        return null;
+    }
+
+    return raw;
+}
+
+function normalizeDayName(value) {
+    return String(value || "")
+        .toLowerCase()
+        .trim()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+
+function pickTodayOpeningFromSchedule(schedule) {
+    if (!schedule || !Array.isArray(schedule.days)) {
+        return { openFrom: "", openTill: "" };
+    }
+
+    const today = normalizeDayName(
+        new Intl.DateTimeFormat("nl-NL", { weekday: "long", timeZone: "Europe/Amsterdam" }).format(new Date())
+    );
+
+    const todayEntry = schedule.days.find((item) => normalizeDayName(item?.day) === today);
+    const preferred = todayEntry && !itemClosed(todayEntry)
+        ? todayEntry
+        : schedule.days.find((item) => !itemClosed(item)) || todayEntry;
+
+    return {
+        openFrom: firstNonEmptyString(preferred?.open),
+        openTill: firstNonEmptyString(preferred?.close),
+    };
+}
+
+function resolveOpeningHours(openFromRaw, openTillRaw, seed) {
+    const schedule = parseOpeningSchedule(openFromRaw);
+    const scheduleToday = pickTodayOpeningFromSchedule(schedule);
+
+    const openFrom = firstNonEmptyString(
+        typeof openFromRaw === "string" && !openFromRaw.trim().startsWith("{") ? openFromRaw : "",
+        scheduleToday.openFrom,
+        seed?.openFrom
+    );
+
+    const openTill = firstNonEmptyString(
+        openTillRaw,
+        scheduleToday.openTill,
+        seed?.openTill
+    );
+
+    return {
+        openFrom,
+        openTill,
+        openingHours: schedule || undefined,
+    };
+}
+
+function collectShopImageIds(source, seed) {
+    const sourceImages = source?.images && typeof source.images === "object" ? source.images : {};
+    const seedImages = seed?.images && typeof seed.images === "object" ? seed.images : {};
+
+    const gallery = uniqueStrings([
+        ...safeArray(source?.gallery),
+        ...safeArray(source?.galleryMediaIds),
+        ...safeArray(source?.mediaIds),
+        ...safeArray(sourceImages?.gallery),
+        ...safeArray(seed?.gallery),
+    ]);
+
+    const logo = firstNonEmptyString(
+        source?.logoMediaId,
+        source?.logo,
+        source?.logoUrl,
+        sourceImages?.logo,
+        seed?.logo,
+        seedImages?.logo
+    );
+    const overview = firstNonEmptyString(
+        source?.overviewImageId,
+        source?.heroImageId,
+        source?.coverImageId,
+        source?.imageId,
+        sourceImages?.overview,
+        sourceImages?.hero,
+        sourceImages?.cover,
+        seedImages?.overview
+    );
+    const close = firstNonEmptyString(
+        source?.closeImageId,
+        source?.detailImageId,
+        sourceImages?.close,
+        seedImages?.close
+    );
+    const mood = firstNonEmptyString(
+        source?.moodImageId,
+        source?.promoImageId,
+        sourceImages?.mood,
+        seedImages?.mood
+    );
+
+    const mergedGallery = uniqueStrings([logo, overview, close, mood, ...gallery]);
+
+    return {
+        logo,
+        images: {
+            logo,
+            overview,
+            close,
+            mood,
+        },
+        gallery: mergedGallery,
+    };
 }
 
 function firstNonEmptyString(...values) {
@@ -644,12 +1056,13 @@ function buildSystemSyncOperations(firestore, systemData) {
 function toGrowerDocument(source, fallbackName, fallbackNumericId) {
     const sourceId = firstNonEmptyString(source?.id, source?.tenantId, fallbackName);
     const title = firstNonEmptyString(source?.businessName, source?.name, source?.title, source?.displayName, fallbackName, sourceId);
-    const image = firstNonEmptyString(source?.logoMediaId, source?.thumbnailUrl, source?.logoUrl, source?.logoImageId, source?.imageUrl);
+    const image = firstNonEmptyString(source?.logoMediaId);
 
     return {
         sourceId,
         data: {
             id: toNumericId(sourceId, fallbackNumericId),
+            logoMediaId: image || undefined,
             title,
             thumbnailUrl: image,
             description: firstNonEmptyString(source?.description, source?.companyAddress),
@@ -657,11 +1070,12 @@ function toGrowerDocument(source, fallbackName, fallbackNumericId) {
             shortcode: toSlug(title || sourceId),
             images: {
                 logo: image,
-                overview: firstNonEmptyString(source?.overviewImageUrl, image),
+                overview: "",
                 close: firstNonEmptyString(source?.closeImageUrl),
                 mood: firstNonEmptyString(source?.moodImageUrl),
             },
             isApproved: Boolean(source?.isApproved),
+            sourceStatus: "active",
         },
     };
 }
@@ -669,38 +1083,73 @@ function toGrowerDocument(source, fallbackName, fallbackNumericId) {
 function toShopDocument(source, fallbackName, fallbackNumericId, seed) {
     const name = firstNonEmptyString(source?.businessName, source?.name, source?.title, source?.displayName, fallbackName);
     const sourceId = firstNonEmptyString(source?.id, source?.retailerId, name);
-    const latRaw = source?.lat ?? source?.latitude;
-    const lngRaw = source?.lng ?? source?.longitude;
-    const lat = Number.isFinite(Number(latRaw)) ? Number(latRaw) : (seed?.lat ?? 0);
-    const lng = Number.isFinite(Number(lngRaw)) ? Number(lngRaw) : (seed?.lng ?? 0);
+    const coordinates = extractCoordinates(source, seed);
+    const lat = coordinates.lat;
+    const lng = coordinates.lng;
     const shortcode = seed?.shortcode || toSlug(name || sourceId || String(fallbackNumericId));
+
+    const pickupRaw = firstDefined(source?.pickup, source?.hasPickup, source?.pickupOnly, source?.takeAway);
+    const driveRaw = firstDefined(source?.drive, source?.driveThrough, source?.hasDrive, source?.driveThru);
+    const cardRaw = firstDefined(source?.payByCard, source?.cardPayment, source?.pin, source?.acceptsCard);
+    const parkingRaw = firstDefined(source?.easyParking, source?.parking, source?.hasParking);
+    const foreignsRaw = firstDefined(source?.allowForeigns, source?.allowsForeigns, source?.foreignersAllowed);
+    const disabledRaw = firstDefined(source?.disabled, source?.accessible, source?.wheelchairAccessible);
+    const openFromRaw = firstDefined(source?.openFrom, source?.openingFrom, source?.opensAt);
+    const openTillRaw = firstDefined(source?.openTill, source?.openingTill, source?.closesAt);
+    const openingHours = resolveOpeningHours(openFromRaw, openTillRaw, seed);
+    const media = collectShopImageIds(source, seed);
+    const province = normalizeProvince(
+        firstNonEmptyString(
+            source?.province,
+            source?.state,
+            source?.region,
+            seed?.province,
+            detectProvinceFromAddressText(source?.companyAddress)
+        )
+    );
+    const country = normalizeCountry(
+        firstNonEmptyString(
+            source?.country,
+            source?.countryCode,
+            seed?.country,
+            detectCountryFromAddressText(source?.companyAddress)
+        )
+    );
 
     return {
         sourceId,
         data: {
+            ...verdiqShopIdentity(source),
             id: seed?.id || toNumericId(sourceId || shortcode, fallbackNumericId),
             name: name || shortcode,
             lat,
             lng,
             rating: Number.isFinite(Number(source?.rating)) ? Number(source.rating) : (seed?.rating || 0),
-            logo: firstNonEmptyString(source?.logoMediaId, source?.logo, source?.logoUrl),
+            logo: media.logo,
+            gallery: media.gallery,
+            images: media.images,
             promo: Boolean(source?.promo ?? seed?.promo ?? false),
-            pickup: Boolean(source?.pickup ?? seed?.pickup ?? false),
-            drive: Boolean(source?.drive ?? seed?.drive ?? false),
-            payByCard: Boolean(source?.payByCard ?? seed?.payByCard ?? false),
-            easyParking: Boolean(source?.easyParking ?? seed?.easyParking ?? false),
-            allowForeigns: Boolean(source?.allowForeigns ?? seed?.allowForeigns ?? false),
-            disabled: Boolean(source?.disabled ?? seed?.disabled ?? false),
-            openFrom: firstNonEmptyString(source?.openFrom, seed?.openFrom),
-            openTill: firstNonEmptyString(source?.openTill, seed?.openTill),
+            pickup: coerceBoolean(pickupRaw, Boolean(seed?.pickup ?? false)),
+            drive: coerceBoolean(driveRaw, Boolean(seed?.drive ?? false)),
+            payByCard: coerceBoolean(cardRaw, Boolean(seed?.payByCard ?? false)),
+            easyParking: coerceBoolean(parkingRaw, Boolean(seed?.easyParking ?? false)),
+            allowForeigns: coerceBoolean(foreignsRaw, Boolean(seed?.allowForeigns ?? false)),
+            disabled: coerceBoolean(disabledRaw, Boolean(seed?.disabled ?? false)),
+            openFrom: openingHours.openFrom,
+            openTill: openingHours.openTill,
             distance: 0,
             shortcode,
-            description: firstNonEmptyString(source?.description, source?.companyAddress, seed?.description),
+            description: firstNonEmptyString(source?.shortDescription, source?.description, seed?.description, source?.companyAddress),
+            companyAddress: firstNonEmptyString(source?.companyAddress),
+            province,
+            country,
+            openingHours: openingHours.openingHours,
             products: [],
             growers: [],
             source: "graphql",
             syncedAt: admin.firestore.FieldValue.serverTimestamp(),
             isApproved: Boolean(source?.isApproved),
+            sourceStatus: "active",
         },
     };
 }
@@ -724,24 +1173,289 @@ async function fetchGrowers() {
         .filter((item) => item.sourceId || item.data.title);
 }
 
+async function fetchShopsWithScore(candidate, shopSeedByName) {
+    try {
+        const data = await executeGraphQl(candidate.query);
+        const items = safeArray(candidate.pick(data))
+            .filter((item) => {
+                const type = item?.type;
+                if (!type) return true;
+                return isShopTenant(type);
+            })
+            .map((item, index) => {
+                const name = firstNonEmptyString(item?.businessName, item?.name, item?.title, item?.displayName);
+                const seed = shopSeedByName.get(normalizeText(name));
+                return toShopDocument(item, name, index + 1, seed);
+            })
+            .filter((item) => item.data.shortcode);
+
+        const withCoordinates = items.filter((entry) => Number(entry.data.lat) !== 0 || Number(entry.data.lng) !== 0).length;
+
+        return { items, withCoordinates, error: "" };
+    } catch (error) {
+        return {
+            items: [],
+            withCoordinates: 0,
+            error: error instanceof Error ? error.message : String(error),
+        };
+    }
+}
+
 async function fetchShops(shopSeedByName) {
-    const { items, reasons } = await executeFirstSuccessfulArray(SHOP_QUERY_CANDIDATES);
-    if (!items.length && reasons.length) {
-        console.warn(`[catalog-sync-worker] Geen winkel-query beschikbaar; fallback op exclusiveRetailers. ${reasons[0]}`);
+    let bestItems = [];
+    let bestScore = -1;
+    const reasons = [];
+
+    for (const candidate of SHOP_QUERY_CANDIDATES) {
+        const result = await fetchShopsWithScore(candidate, shopSeedByName);
+        if (result.error) {
+            reasons.push(candidate.name + ": " + result.error);
+            continue;
+        }
+
+        const score = result.withCoordinates * 100000 + result.items.length;
+        if (score > bestScore) {
+            bestScore = score;
+            bestItems = result.items;
+        }
     }
 
-    return safeArray(items)
-        .filter((item) => {
-            const type = item?.type;
-            if (!type) return true;
-            return isShopTenant(type);
-        })
-        .map((item, index) => {
-            const name = firstNonEmptyString(item?.businessName, item?.name, item?.title, item?.displayName);
-            const seed = shopSeedByName.get(normalizeText(name));
-            return toShopDocument(item, name, index + 1, seed);
-        })
-        .filter((item) => item.data.shortcode);
+    if (!bestItems.length && reasons.length) {
+        console.warn("[catalog-sync-worker] Geen winkel-query beschikbaar; fallback op exclusiveRetailers. " + reasons[0]);
+    }
+
+    return bestItems;
+}
+
+
+function hasShopCoordinates(entry) {
+    const lat = Number(entry?.data?.lat ?? 0);
+    const lng = Number(entry?.data?.lng ?? 0);
+    return hasValidCoordinatesValues(lat, lng);
+}
+
+function mergeShopEntries(...collections) {
+    const merged = new Map();
+
+    collections.flat().forEach((entry) => {
+        if (!entry?.data?.shortcode) return;
+        const key = entry.data.shortcode;
+        const existing = merged.get(key);
+        if (!existing) {
+            merged.set(key, entry);
+            return;
+        }
+
+        const existingHasCoords = hasShopCoordinates(existing);
+        const incomingHasCoords = hasShopCoordinates(entry);
+        const coordsSource = incomingHasCoords && !existingHasCoords ? entry : existing;
+
+        merged.set(key, {
+            sourceId: firstNonEmptyString(existing.sourceId, entry.sourceId),
+            data: {
+                ...existing.data,
+                ...entry.data,
+                id: existing.data.id || entry.data.id,
+                name: firstNonEmptyString(existing.data.name, entry.data.name),
+                lat: coordsSource.data.lat,
+                lng: coordsSource.data.lng,
+                rating: Math.max(Number(existing.data.rating || 0), Number(entry.data.rating || 0)),
+                logo: firstNonEmptyString(existing.data.logo, entry.data.logo),
+                description: firstNonEmptyString(existing.data.description, entry.data.description),
+                companyAddress: firstNonEmptyString(existing.data.companyAddress, entry.data.companyAddress),
+                openingHours: existing.data.openingHours || entry.data.openingHours,
+                openFrom: firstNonEmptyString(existing.data.openFrom, entry.data.openFrom),
+                openTill: firstNonEmptyString(existing.data.openTill, entry.data.openTill),
+                promo: Boolean(existing.data.promo || entry.data.promo),
+                pickup: Boolean(existing.data.pickup || entry.data.pickup),
+                drive: Boolean(existing.data.drive || entry.data.drive),
+                payByCard: Boolean(existing.data.payByCard || entry.data.payByCard),
+                easyParking: Boolean(existing.data.easyParking || entry.data.easyParking),
+                allowForeigns: Boolean(existing.data.allowForeigns || entry.data.allowForeigns),
+                disabled: Boolean(existing.data.disabled || entry.data.disabled),
+                isApproved: Boolean(existing.data.isApproved || entry.data.isApproved),
+                province: normalizeProvince(firstNonEmptyString(existing.data.province, entry.data.province)),
+                country: normalizeCountry(firstNonEmptyString(existing.data.country, entry.data.country)),
+                products: Array.from(new Set([...(existing.data.products || []), ...(entry.data.products || [])])),
+                growers: Array.from(new Set([...(existing.data.growers || []), ...(entry.data.growers || [])])),
+                syncedAt: admin.firestore.FieldValue.serverTimestamp(),
+            },
+        });
+    });
+
+    return Array.from(merged.values());
+}
+
+
+let geocodeNextRequestAt = 0;
+const geocodeRateLimitMs = Math.max(250, Number.parseInt(process.env.GEOCODE_RATE_LIMIT_MS || "1100", 10) || 1100);
+
+function delay(ms) {
+    if (!ms || ms <= 0) return Promise.resolve();
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function rateLimitedGeocodeFetch(url) {
+    const now = Date.now();
+    const waitMs = Math.max(0, geocodeNextRequestAt - now);
+    if (waitMs > 0) {
+        await delay(waitMs);
+    }
+
+    const response = await fetch(url, {
+        headers: {
+            Accept: "application/json",
+            "User-Agent": "weedinfo-catalog-sync/1.0 (contact: support@weedinfo.nl)",
+        },
+    });
+
+    geocodeNextRequestAt = Date.now() + geocodeRateLimitMs;
+    return response;
+}
+
+async function fetchGeoDetailsByCoordinates(lat, lng) {
+    if (!hasValidCoordinatesValues(lat, lng)) return null;
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&addressdetails=1&lat=${encodeURIComponent(
+        String(lat)
+    )}&lon=${encodeURIComponent(String(lng))}`;
+    const response = await rateLimitedGeocodeFetch(url);
+    if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`reverse geocode failed (${response.status}): ${body.slice(0, 180)}`);
+    }
+    return response.json();
+}
+
+async function fetchGeoDetailsByAddress(addressLine, fallbackQuery = "") {
+    const query = firstNonEmptyString(addressLine, fallbackQuery);
+    if (!query) return null;
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&countrycodes=nl&q=${encodeURIComponent(
+        query
+    )}`;
+    const response = await rateLimitedGeocodeFetch(url);
+    if (!response.ok) {
+        const body = await response.text().catch(() => "");
+        throw new Error(`address geocode failed (${response.status}): ${body.slice(0, 180)}`);
+    }
+    const payload = await response.json();
+    if (!Array.isArray(payload) || !payload.length) return null;
+    return payload[0];
+}
+
+function parseGeoResponse(raw) {
+    if (!raw || typeof raw !== "object") {
+        return { province: "", country: "", lat: null, lng: null };
+    }
+    const address = raw.address && typeof raw.address === "object" ? raw.address : {};
+    const province = normalizeProvince(firstNonEmptyString(address.state, address.province, address.county, address.region));
+    const country = normalizeCountry(firstNonEmptyString(address.country, address.country_code));
+    const lat = toFiniteNumber(raw.lat);
+    const lng = toFiniteNumber(raw.lon);
+    const validCoordinates = hasValidCoordinatesValues(lat, lng);
+    return {
+        province,
+        country,
+        lat: validCoordinates ? lat : null,
+        lng: validCoordinates ? lng : null,
+    };
+}
+
+async function buildExistingShopsMap(firestore) {
+    const snapshot = await firestore.collection("Shops").get();
+    const map = new Map();
+    snapshot.forEach((doc) => {
+        map.set(doc.id, doc.data() || {});
+    });
+    return map;
+}
+
+async function enrichShopsGeography(shopDocs, existingShopsByShortcode) {
+    const geocodeCache = new Map();
+    let geocodeChecks = 0;
+    let geocodeUpdates = 0;
+    const entries = Array.from(shopDocs.entries());
+    const total = entries.length;
+
+    console.log(`[catalog-sync-worker] shop geo-sync gestart: ${total} winkels`);
+
+    for (let index = 0; index < entries.length; index += 1) {
+        const [shortcode, shop] = entries[index];
+        const shopName = firstNonEmptyString(shop?.name, shortcode, "onbekende-winkel");
+        const existing = existingShopsByShortcode.get(shortcode) || {};
+        const mergedProvince = normalizeProvince(firstNonEmptyString(shop.province, existing.province));
+        const mergedCountry = normalizeCountry(firstNonEmptyString(shop.country, existing.country));
+
+        shop.province = mergedProvince;
+        shop.country = mergedCountry;
+
+        if (mergedProvince && mergedCountry) {
+            continue;
+        }
+
+        geocodeChecks += 1;
+
+        const baseLat = toFiniteNumber(firstDefined(shop.lat, existing.lat));
+        const baseLng = toFiniteNumber(firstDefined(shop.lng, existing.lng));
+        const queryAddress = firstNonEmptyString(shop.companyAddress, existing.companyAddress);
+        const fallbackQuery = firstNonEmptyString(shop.name, existing.name, shortcode);
+        const cacheKey = hasValidCoordinatesValues(baseLat, baseLng)
+            ? `reverse:${baseLat.toFixed(6)},${baseLng.toFixed(6)}`
+            : `search:${normalizeText(queryAddress || fallbackQuery)}`;
+
+        let geo = geocodeCache.get(cacheKey);
+        if (!geo) {
+            try {
+                console.log(
+                    `[catalog-sync-worker] shop ${index + 1}/${total}: ${shopName} - locatie update gestart`
+                );
+                let payload = null;
+                if (hasValidCoordinatesValues(baseLat, baseLng)) {
+                    payload = await fetchGeoDetailsByCoordinates(baseLat, baseLng);
+                } else if (queryAddress || fallbackQuery) {
+                    payload = await fetchGeoDetailsByAddress(queryAddress, fallbackQuery);
+                }
+                geo = parseGeoResponse(payload);
+            } catch (error) {
+                geo = { province: "", country: "", lat: null, lng: null };
+                const message = error instanceof Error ? error.message : String(error);
+                console.log(
+                    `[catalog-sync-worker] shop ${index + 1}/${total}: ${shopName} - locatie update mislukt (${message})`
+                );
+            }
+            geocodeCache.set(cacheKey, geo);
+        }
+
+        const finalProvince = normalizeProvince(firstNonEmptyString(shop.province, existing.province, geo.province));
+        const finalCountry = normalizeCountry(
+            firstNonEmptyString(shop.country, existing.country, geo.country, detectCountryFromAddressText(queryAddress))
+        );
+
+        if (finalProvince || finalCountry) {
+            geocodeUpdates += 1;
+        }
+
+        shop.province = finalProvince;
+        shop.country = finalCountry;
+
+        if (!hasValidCoordinatesValues(shop.lat, shop.lng) && hasValidCoordinatesValues(geo.lat, geo.lng)) {
+            shop.lat = geo.lat;
+            shop.lng = geo.lng;
+        }
+
+        const updatedCoordinates = hasValidCoordinatesValues(shop.lat, shop.lng);
+        const updatedProvince = Boolean(shop.province);
+        const updatedCountry = Boolean(shop.country);
+        if (updatedProvince || updatedCountry || updatedCoordinates) {
+            console.log(
+                `[catalog-sync-worker] shop ${index + 1}/${total}: ${shopName} - locatie resultaat: province=${updatedProvince ? "ja" : "nee"}, country=${updatedCountry ? "ja" : "nee"}, coords=${updatedCoordinates ? "ja" : "nee"}`
+            );
+        }
+    }
+
+    console.log(
+        `[catalog-sync-worker] shop geo-sync klaar: checks=${geocodeChecks}, updates=${geocodeUpdates}, totaal=${total}`
+    );
+    return { geocodeChecks, geocodeUpdates };
 }
 
 async function fetchAllProducts() {
@@ -819,12 +1533,30 @@ function mapProduct(source, index, growersBySourceId, growersByName) {
         }));
     });
 
+    const legacyShortcode = toSlug(`${source.name}-${source.id}`);
+    const growerSlug = toSlug(resolvedGrower.title || source.tenantId || "teler");
+    const productSlug = toSlug(source.name || `product-${numericId}`);
+    const shortcode = toSlug(`${productSlug}-${growerSlug}`);
+    const legacyGrowerFirst = toSlug(`${growerSlug}-${productSlug}`);
+    const legacyShortcodes = Array.from(
+        new Set([legacyShortcode, legacyGrowerFirst].filter((item) => item && item !== shortcode))
+    );
+
     return {
         id: numericId,
-        shortcode: toSlug(`${source.name}-${source.id}`),
+        sourceStatus: "active",
+        shortcode,
+        legacyShortcodes,
+        categoryId: source.categoryId || undefined,
+        subCategoryId: source.subCategoryId || undefined,
+        leafletId: source.leafletId || undefined,
+        promoImageId: source.promoImageId || undefined,
+        mainImageId: source.mainImageId || undefined,
+        promoVideoId: source.promoVideoId || undefined,
         title: source.name,
-        brand: resolvedGrower,
+        brand: { ...resolvedGrower, sourceId: source.tenantId },
         grower: resolvedGrower.id,
+        growerSourceId: source.tenantId,
         type,
         thumbnailUrl: source.mainImageId || "",
         shortDescription: String(source.description || "").slice(0, 180),
@@ -836,8 +1568,8 @@ function mapProduct(source, index, growersBySourceId, growersByName) {
         rating: 0,
         images: {
             main: source.mainImageId || "",
-            close: source.promoImageId || "",
-            mood: source.promoVideoId || "",
+            close: "",
+            mood: "",
         },
         dominantTerpene: {
             id: numericId,
@@ -925,10 +1657,230 @@ async function commitInChunks(firestore, operations, chunkSize = 450) {
         const chunk = operations.slice(index, index + chunkSize);
         const batch = firestore.batch();
         chunk.forEach((op) => {
-            batch.set(op.ref, op.data, { merge: true });
+            batch.set(op.ref, stripUndefinedDeep(op.data), { merge: true });
         });
         await batch.commit();
     }
+}
+
+function isPlainObject(value) {
+    if (!value || typeof value !== "object") {
+        return false;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+}
+
+function stripUndefinedDeep(value) {
+    if (Array.isArray(value)) {
+        return value
+            .map((item) => stripUndefinedDeep(item))
+            .filter((item) => item !== undefined);
+    }
+
+    if (isPlainObject(value)) {
+        const output = {};
+        Object.entries(value).forEach(([key, item]) => {
+            const next = stripUndefinedDeep(item);
+            if (next !== undefined) {
+                output[key] = next;
+            }
+        });
+        return output;
+    }
+
+    return value === undefined ? undefined : value;
+}
+
+async function getCollectionCount(firestore, collectionName) {
+    try {
+        const aggregateSnapshot = await firestore.collection(collectionName).count().get();
+        const aggregateData = aggregateSnapshot.data();
+        if (typeof aggregateData?.count === "number") {
+            return aggregateData.count;
+        }
+    } catch {
+        // fallback hieronder
+    }
+
+    const snapshot = await firestore.collection(collectionName).get();
+    return snapshot.size;
+}
+
+function normalizeReviewRating(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    return Math.max(1, Math.min(5, Math.round(numeric)));
+}
+
+function deriveReviewTarget(data, lookups) {
+    const asText = (value) => (typeof value === "string" ? value.trim() : "");
+
+    const directProductId = asText(data?.targetProductId || data?.productSourceId || data?.productId);
+    if (directProductId) {
+        return { type: "product", targetId: directProductId };
+    }
+
+    const productShortcode = asText(data?.productShortcode);
+    if (productShortcode) {
+        const mapped = lookups.productSourceIdByShortcode.get(productShortcode) || lookups.productSourceIdByShortcode.get(productShortcode.toLowerCase());
+        if (mapped) {
+            return { type: "product", targetId: mapped };
+        }
+    }
+
+    const directTenantId = asText(data?.targetTenantId || data?.tenantId || data?.shopTenantId || data?.growerTenantId);
+    if (directTenantId) {
+        return { type: "company", targetId: directTenantId };
+    }
+
+    const shopShortcode = asText(data?.shopShortcode || data?.targetShopShortcode);
+    if (shopShortcode) {
+        const mapped = lookups.tenantIdByShopShortcode.get(shopShortcode) || lookups.tenantIdByShopShortcode.get(shopShortcode.toLowerCase());
+        if (mapped) {
+            return { type: "company", targetId: mapped };
+        }
+    }
+
+    const growerShortcode = asText(data?.growerShortcode || data?.targetGrowerShortcode || data?.brandShortcode);
+    if (growerShortcode) {
+        const mapped = lookups.tenantIdByGrowerShortcode.get(growerShortcode) || lookups.tenantIdByGrowerShortcode.get(growerShortcode.toLowerCase());
+        if (mapped) {
+            return { type: "company", targetId: mapped };
+        }
+    }
+
+    const entityType = asText(data?.targetType || data?.entityType || data?.reviewType).toLowerCase();
+    const entityId = asText(data?.targetId || data?.entityId);
+    if (entityType && entityId) {
+        if (entityType.includes("product")) {
+            return { type: "product", targetId: entityId };
+        }
+        if (entityType.includes("shop") || entityType.includes("grower") || entityType.includes("company") || entityType.includes("tenant") || entityType.includes("brand")) {
+            return { type: "company", targetId: entityId };
+        }
+    }
+
+    return null;
+}
+
+async function syncPendingReviewsToGraphQl(firestore, lookups) {
+    const snapshot = await firestore.collection("reviews").get();
+    const summary = {
+        total: snapshot.size,
+        pending: 0,
+        pushed: 0,
+        failed: 0,
+        skipped: 0,
+    };
+
+    for (const item of snapshot.docs) {
+        const data = item.data() || {};
+        const syncMeta = data.graphqlSync || {};
+        if (syncMeta.sentAt || syncMeta.status === "sent") {
+            continue;
+        }
+
+        summary.pending += 1;
+
+        const rating = normalizeReviewRating(data.rating);
+        const text = firstNonEmptyString(data.review, data.text);
+        const reviewerName = firstNonEmptyString(data.reviewerName, data.userName, data.displayName, "Anoniem");
+        const externalRef = firstNonEmptyString(data.externalRef, "firestore-review-" + item.id);
+        const target = deriveReviewTarget(data, lookups);
+
+        if (!rating || !text || !target?.targetId) {
+            summary.skipped += 1;
+            await firestore.collection("reviews").doc(item.id).set(
+                {
+                    graphqlSync: {
+                        status: "skipped",
+                        reason: !target?.targetId ? "missing_target" : "missing_payload",
+                        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+                        externalRef,
+                    },
+                },
+                { merge: true }
+            );
+            continue;
+        }
+
+        try {
+            if (target.type === "product") {
+                const payload = await executeGraphQl(CREATE_PRODUCT_REVIEW_MUTATION, {
+                    input: {
+                        targetProductId: target.targetId,
+                        rating,
+                        text,
+                        reviewerName,
+                        source: "frontend",
+                        externalRef,
+                    },
+                });
+
+                await firestore.collection("reviews").doc(item.id).set(
+                    {
+                        graphqlSync: {
+                            status: "sent",
+                            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+                            lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+                            externalRef,
+                            targetType: "product",
+                            targetId: target.targetId,
+                            graphqlReviewId: firstNonEmptyString(payload?.createProductReview?.id),
+                        },
+                    },
+                    { merge: true }
+                );
+            } else {
+                const payload = await executeGraphQl(CREATE_COMPANY_REVIEW_MUTATION, {
+                    input: {
+                        targetTenantId: target.targetId,
+                        rating,
+                        text,
+                        reviewerName,
+                        source: "frontend",
+                        externalRef,
+                    },
+                });
+
+                await firestore.collection("reviews").doc(item.id).set(
+                    {
+                        graphqlSync: {
+                            status: "sent",
+                            sentAt: admin.firestore.FieldValue.serverTimestamp(),
+                            lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+                            externalRef,
+                            targetType: "company",
+                            targetId: target.targetId,
+                            graphqlReviewId: firstNonEmptyString(payload?.createCompanyReview?.id),
+                        },
+                    },
+                    { merge: true }
+                );
+            }
+
+            summary.pushed += 1;
+        } catch (error) {
+            summary.failed += 1;
+            const message = error instanceof Error ? error.message : String(error);
+            await firestore.collection("reviews").doc(item.id).set(
+                {
+                    graphqlSync: {
+                        status: "error",
+                        lastAttemptAt: admin.firestore.FieldValue.serverTimestamp(),
+                        lastError: message,
+                        externalRef,
+                        targetType: target.type,
+                        targetId: target.targetId,
+                    },
+                },
+                { merge: true }
+            );
+        }
+    }
+
+    return summary;
 }
 
 async function run() {
@@ -936,6 +1888,7 @@ async function run() {
     const firestore = admin.firestore();
     const products = await fetchAllProducts();
     const systemData = await fetchSystemData();
+    const existingShopsByShortcode = await buildExistingShopsMap(firestore);
 
     const brandDocs = new Map();
     const shopDocs = new Map();
@@ -962,14 +1915,22 @@ async function run() {
         .filter((item) => item.data.shortcode);
 
     const fetchedGrowers = tenantGrowers.length ? tenantGrowers : await fetchGrowers();
-    const fetchedShops = tenantShops.length ? tenantShops : await fetchShops(shopSeedByName);
+    const fetchedShopsFromCandidates = await fetchShops(shopSeedByName);
+    const fetchedShops = mergeShopEntries(tenantShops, fetchedShopsFromCandidates);
 
     const growersBySourceId = new Map();
     const growersByName = new Map();
+    const productSourceIdByShortcode = new Map();
+    const tenantIdByGrowerShortcode = new Map();
+    const tenantIdByShopShortcode = new Map();
 
     fetchedGrowers.forEach((entry) => {
         growersBySourceId.set(entry.sourceId, entry.data);
         growersByName.set(normalizeText(entry.data.title), entry.data);
+        if (entry?.data?.shortcode && entry?.sourceId) {
+            tenantIdByGrowerShortcode.set(entry.data.shortcode, entry.sourceId);
+            tenantIdByGrowerShortcode.set(entry.data.shortcode.toLowerCase(), entry.sourceId);
+        }
         brandDocs.set(entry.sourceId, {
             ...entry.data,
             source: "graphql",
@@ -981,10 +1942,23 @@ async function run() {
     fetchedShops.forEach((entry) => {
         shopDocs.set(entry.data.shortcode, entry.data);
         shopsByName.set(normalizeText(entry.data.name), entry.data.shortcode);
+        if (entry?.data?.shortcode && entry?.sourceId) {
+            tenantIdByShopShortcode.set(entry.data.shortcode, entry.sourceId);
+            tenantIdByShopShortcode.set(entry.data.shortcode.toLowerCase(), entry.sourceId);
+        }
     });
 
     products.forEach((product, index) => {
         const mapped = mapProduct(product, index, growersBySourceId, growersByName);
+        if (mapped.shortcode && product?.id) {
+            productSourceIdByShortcode.set(mapped.shortcode, product.id);
+            productSourceIdByShortcode.set(mapped.shortcode.toLowerCase(), product.id);
+            (mapped.legacyShortcodes || []).forEach((legacyCode) => {
+                if (!legacyCode) return;
+                productSourceIdByShortcode.set(legacyCode, product.id);
+                productSourceIdByShortcode.set(legacyCode.toLowerCase(), product.id);
+            });
+        }
         productOps.push({
             ref: firestore.collection("Producten").doc(product.id),
             data: mapped,
@@ -1020,6 +1994,8 @@ async function run() {
                 distance: 0,
                 shortcode,
                 description: "",
+                province: "",
+                country: "",
                 products: [],
                 growers: [],
                 source: "graphql",
@@ -1040,6 +2016,8 @@ async function run() {
     brandDocs.forEach((brand, tenantId) => {
         metaOps.push({ ref: firestore.collection("Brands").doc(tenantId), data: brand });
     });
+    const shopGeoSummary = await enrichShopsGeography(shopDocs, existingShopsByShortcode);
+
     shopDocs.forEach((shop, shortcode) => {
         metaOps.push({ ref: firestore.collection("Shops").doc(shortcode), data: shop });
     });
@@ -1047,10 +2025,38 @@ async function run() {
         await commitInChunks(firestore, metaOps);
     }
 
+    const markMissingSourceRecordsStale = async (collectionName, activeIds) => {
+        const snapshot = await firestore.collection(collectionName).get();
+        const operations = snapshot.docs
+            .filter((item) => !activeIds.has(item.id) && item.data()?.sourceStatus !== "stale")
+            .map((item) => ({ ref: item.ref, data: { sourceStatus: "stale", staleDetectedAt: admin.firestore.FieldValue.serverTimestamp() }, merge: true }));
+        if (operations.length) await commitInChunks(firestore, operations);
+        return operations.length;
+    };
+    const activeProductIds = new Set(products.map((item) => String(item.id)));
+    const activeGrowerIds = new Set(brandDocs.keys());
+    const activeShopDocumentIds = new Set([...shopDocs.entries()].filter(([, item]) => item.verdiqTenantId).map(([shortcode]) => shortcode));
+    const [staleProducts, staleGrowers, staleShops] = await Promise.all([
+        markMissingSourceRecordsStale("Producten", activeProductIds),
+        markMissingSourceRecordsStale("Brands", activeGrowerIds),
+        markMissingSourceRecordsStale("Shops", activeShopDocumentIds),
+    ]);
+
     const systemSync = buildSystemSyncOperations(firestore, systemData);
     if (systemSync.operations.length) {
         await commitInChunks(firestore, systemSync.operations);
     }
+
+    const reviewPush = await syncPendingReviewsToGraphQl(firestore, {
+        productSourceIdByShortcode,
+        tenantIdByShopShortcode,
+        tenantIdByGrowerShortcode,
+    });
+
+    const [syncedUsers, syncedReviews] = await Promise.all([
+        getCollectionCount(firestore, "Gebruikers"),
+        getCollectionCount(firestore, "reviews"),
+    ]);
 
     await firestore.collection("SyncStatus").doc("graphql").set(
         {
@@ -1065,6 +2071,17 @@ async function run() {
             syncedEffects: systemSync.counts.effects,
             syncedCategories: systemSync.counts.categories,
             syncedSubCategories: systemSync.counts.subCategories,
+            syncedUsers,
+            syncedReviews,
+            pushedReviews: reviewPush.pushed,
+            pendingReviews: reviewPush.pending,
+            failedReviewPushes: reviewPush.failed,
+            skippedReviewPushes: reviewPush.skipped,
+            geocodeChecks: shopGeoSummary.geocodeChecks,
+            geocodeUpdates: shopGeoSummary.geocodeUpdates,
+            staleProducts,
+            staleGrowers,
+            staleShops,
             lastSuccessfulSyncAt: admin.firestore.FieldValue.serverTimestamp(),
             worker: "catalog-sync-worker",
         },
@@ -1072,7 +2089,7 @@ async function run() {
     );
 
     console.log(
-        `[catalog-sync-worker] done - endpoint=${endpoint}, products=${products.length}, shops=${shopDocs.size}, growers=${brandDocs.size}, terpenes=${systemSync.counts.terpenes}, tastes=${systemSync.counts.tastes}, effects=${systemSync.counts.effects}, categories=${systemSync.counts.categories}, subCategories=${systemSync.counts.subCategories}`
+        `[catalog-sync-worker] done - endpoint=${endpoint}, products=${products.length}, shops=${shopDocs.size}, growers=${brandDocs.size}, users=${syncedUsers}, reviews=${syncedReviews}, reviewsPushed=${reviewPush.pushed}, reviewsPending=${reviewPush.pending}, reviewPushFailed=${reviewPush.failed}, reviewPushSkipped=${reviewPush.skipped}, terpenes=${systemSync.counts.terpenes}, tastes=${systemSync.counts.tastes}, effects=${systemSync.counts.effects}, categories=${systemSync.counts.categories}, subCategories=${systemSync.counts.subCategories}, geocodeChecks=${shopGeoSummary.geocodeChecks}, geocodeUpdates=${shopGeoSummary.geocodeUpdates}`
     );
 }
 
@@ -1101,6 +2118,23 @@ run().catch(async (error) => {
     }
     process.exit(1);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

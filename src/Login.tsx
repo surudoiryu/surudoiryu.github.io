@@ -3,12 +3,14 @@ import {
     Button,
     Card,
     CardContent,
-    Input,
     Typography,
+    TextField,
 } from "@mui/material";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
+import { sendPasswordResetEmail } from "firebase/auth";
+import { auth } from "./firebaseConfig";
 
 const Login = () => {
     const { login } = useAuth();
@@ -27,23 +29,21 @@ const Login = () => {
             await login(email, password);
             navigate("/profiel");
         } catch (loginError) {
-            const message =
-                loginError instanceof Error ? loginError.message : "Inloggen is mislukt.";
-            setError(message);
+            setError("Inloggen is niet gelukt. Controleer je gegevens of stel je wachtwoord opnieuw in.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <section style={{ textAlign: "left", margin: 30, paddingBottom: 90 }}>
+        <section style={{ textAlign: "left", padding: "48px 16px 100px", minHeight: "70vh", background: "linear-gradient(145deg,#edf6ef,#fff)" }}>
 
-            <Card sx={{ maxWidth: 560, mx: "auto" }}>
-                <CardContent>
-                    <Typography variant="h5" sx={{ color: "text.secondary", fontWeight: 700, mb: 1 }}>
+            <Card sx={{ maxWidth: 520, mx: "auto", borderRadius: 4, boxShadow: "0 18px 50px rgba(20,70,35,.12)" }}>
+                <CardContent sx={{ p: { xs: 3, md: 5 } }}>
+                    <Typography component="h1" variant="h5" sx={{ color: "text.secondary", fontWeight: 700, mb: 1 }}>
                         Inloggen
                     </Typography>
-                    <Typography variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
+                    <Typography component="h2" variant="body2" sx={{ color: "text.secondary", mb: 2 }}>
                         Log in om likes, reviews en je profiel te beheren.
                     </Typography>
 
@@ -61,10 +61,11 @@ const Login = () => {
                         <Typography variant="body2" sx={{ color: "text.secondary" }}>
                             E-mailadres
                         </Typography>
-                        <Input
+                        <TextField
                             fullWidth
                             required
-                            aria-label="E-mailadres"
+                            label="E-mailadres"
+                            autoComplete="email"
                             type="email"
                             name="email"
                             value={email}
@@ -73,10 +74,11 @@ const Login = () => {
                         <Typography variant="body2" sx={{ color: "text.secondary", mt: 2 }}>
                             Wachtwoord
                         </Typography>
-                        <Input
+                        <TextField
                             fullWidth
                             required
-                            aria-label="Wachtwoord"
+                            label="Wachtwoord"
+                            autoComplete="current-password"
                             type="password"
                             name="password"
                             value={password}
@@ -90,6 +92,11 @@ const Login = () => {
                         >
                             {loading ? "Bezig..." : "Inloggen"}
                         </Button>
+                        <Button type="button" color="inherit" sx={{ mt: 2, ml: 1 }} onClick={async () => {
+                            if (!email) { setError("Vul eerst je e-mailadres in."); return; }
+                            try { await sendPasswordResetEmail(auth, email); setError("Als dit adres bij ons bekend is, ontvang je een e-mail om je wachtwoord te herstellen."); }
+                            catch { setError("Als dit adres bij ons bekend is, ontvang je een e-mail om je wachtwoord te herstellen."); }
+                        }}>Wachtwoord vergeten</Button>
                     </form>
 
                     <Typography variant="body2" sx={{ color: "text.secondary", mt: 2 }}>

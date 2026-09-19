@@ -12,6 +12,7 @@ import {
     collection,
     deleteDoc,
     doc,
+    getDocs,
     onSnapshot,
     query,
     serverTimestamp,
@@ -21,12 +22,12 @@ import {
 } from "firebase/firestore";
 import { auth, db } from "../firebaseConfig";
 import { ProductReview, UserProfile } from "../types/user";
+import { evaluateAdultBirthDate } from "../utils/age-rule.mjs";
 
 type RegisterInput = {
     name: string;
     username: string;
-    avatarUrl?: string;
-    headerImageUrl?: string;
+    birthDate: string;
     email: string;
     password: string;
 };
@@ -100,6 +101,23 @@ const ensureProfileDoc = async (currentUser: User) => {
     }
 };
 
+function normalizeUsername(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+async function ensureUsernameAvailable(username: string, excludeUid?: string) {
+    const normalized = normalizeUsername(username);
+    if (!normalized) {
+        throw new Error("Kies een geldige gebruikersnaam.");
+    }
+
+    const existing = await getDocs(query(collection(db, "Gebruikers"), where("username", "==", normalized)));
+    const conflict = existing.docs.find((docItem) => docItem.id !== excludeUid);
+    if (conflict) {
+        throw new Error("Deze gebruikersnaam is al in gebruik.");
+    }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -159,10 +177,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         };
     }, [user]);
 
-    const register = async ({ name, username, avatarUrl, headerImageUrl, email, password }: RegisterInput) => {
+    const register = async ({ name, username, birthDate, email, password }: RegisterInput) => {
         if (!navigator.onLine) {
             throw new Error("Registreren kan alleen wanneer je online bent.");
         }
+
+        if (!evaluateAdultBirthDate(birthDate).allowed) throw new Error("Registratie is alleen mogelijk vanaf 18 jaar.");
+        const normalizedUsername = normalizeUsername(username);
+        await ensureUsernameAvailable(normalizedUsername);
 
         const credential = await createUserWithEmailAndPassword(auth, email, password);
         await updateProfile(credential.user, { displayName: name });
@@ -171,9 +193,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 uid: credential.user.uid,
                 email,
                 displayName: name,
-                username: username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, ""),
-                avatarUrl: avatarUrl ?? "",
-                headerImageUrl: headerImageUrl ?? "",
+                username: normalizedUsername,
+                avatarUrl: "",
+                headerImageUrl: "",
+                ageVerified: true,
+                ageVerifiedAt: serverTimestamp(),
                 bio: "",
                 pushEnabled: false,
                 likedProducts: [],
@@ -258,6 +282,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             productTitle: input.productTitle,
             rating: input.rating,
             review: input.review,
+            reactions: {},
+            upVotes: 0,
+            downVotes: 0,
             updatedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
         });
@@ -389,7 +416,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (input.displayName !== undefined) payload.displayName = input.displayName;
         if (input.username !== undefined) {
-            payload.username = input.username.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+            const normalizedUsername = normalizeUsername(input.username);
+            await ensureUsernameAvailable(normalizedUsername, user.uid);
+            payload.username = normalizedUsername;
         }
         if (input.avatarUrl !== undefined) payload.avatarUrl = input.avatarUrl;
         if (input.headerImageUrl !== undefined) payload.headerImageUrl = input.headerImageUrl;

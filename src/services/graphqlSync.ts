@@ -315,13 +315,29 @@ function mapProduct(
         }));
     });
 
+    const legacyShortcode = toSlug(`${source.name}-${source.id}`);
+    const growerSlug = toSlug(grower.title || source.tenantId || "teler");
+    const productSlug = toSlug(source.name || `product-${numericId}`);
+    const shortcode = toSlug(`${productSlug}-${growerSlug}`);
+    const legacyGrowerFirst = toSlug(`${growerSlug}-${productSlug}`);
+    const legacyShortcodes = Array.from(
+        new Set([legacyShortcode, legacyGrowerFirst].filter((item) => item && item !== shortcode))
+    );
+
     return {
         id: numericId,
-        shortcode: toSlug(`${source.name}-${source.id}`),
+        shortcode,
+        legacyShortcodes,
+        categoryId: source.categoryId ?? undefined,
+        subCategoryId: source.subCategoryId ?? undefined,
+        leafletId: source.leafletId ?? undefined,
+        promoImageId: source.promoImageId ?? undefined,
+        promoVideoId: source.promoVideoId ?? undefined,
         title: source.name,
         brand: grower,
         grower: grower.id,
         type,
+        mainImageId: source.mainImageId ?? undefined,
         thumbnailUrl: source.mainImageId ?? "",
         shortDescription: (source.description ?? "").slice(0, 180),
         description: source.description ?? "",
@@ -332,8 +348,8 @@ function mapProduct(
         rating: 0,
         images: {
             main: source.mainImageId ?? "",
-            close: source.promoImageId ?? "",
-            mood: source.promoVideoId ?? "",
+            close: "",
+            mood: "",
         },
         dominantTerpene,
         dominantPositiveEffect,

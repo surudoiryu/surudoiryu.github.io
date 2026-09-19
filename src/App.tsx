@@ -1,33 +1,79 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { processList } from "./longProcesses/enums";
 import './App.css';
-import '@fontsource/roboto/300.css';
 import { ListType, GetDataType, LengthCountType } from './types/data';
 import BottomNav from './components/MobileMenu';
 import TopBar from './components/TopBar';
-import PageHome from './Home';
-import PageMap from './Map';
-import PageBlog from './Blog';
-import PageProduct from './Product';
-import PageProductsOverview from './ProductsOverview';
-import PageGrowersOverview from './GrowersOverview';
+import SiteFooter from './components/SiteFooter';
 import { LocationObject } from './types/shop';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
-import PageShop from './Shop';
-import Login from './Login';
-import Signup from './Signup';
-import PageGrower from './Grower';
 import { AuthProvider } from './context/AuthContext';
-import Profile from './Profile';
 import ProtectedRoute from './components/ProtectedRoute';
 import { Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { db } from './firebaseConfig';
-import { doc, increment, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
+import { doc, increment, serverTimestamp, setDoc } from 'firebase/firestore';
+import GtmManager from './components/GtmManager';
+import SeoManager from './components/SeoManager';
+import Loader from './components/Loader';
+import AgeGate, { AgeState, readAgeState } from './components/AgeGate';
+import ScrollToTopButton from './components/ScrollToTopButton';
+
+const PageHome = lazy(() => import('./Home'));
+const PageMap = lazy(() => import('./Map'));
+const PageBlog = lazy(() => import('./Blog'));
+const PageProduct = lazy(() => import('./Product'));
+const PageProductsOverview = lazy(() => import('./ProductsOverview'));
+const PageGrowersOverview = lazy(() => import('./GrowersOverview'));
+const LegalPage = lazy(() => import('./LegalPage'));
+const HealthInfoPage = lazy(() => import('./HealthInfoPage'));
+const PageShop = lazy(() => import('./Shop'));
+const PageKeuzehulp = lazy(() => import('./Keuzehulp'));
+const Login = lazy(() => import('./Login'));
+const Signup = lazy(() => import('./Signup'));
+const PageGrower = lazy(() => import('./Grower'));
+const Profile = lazy(() => import('./Profile'));
+
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+}
+
+const PWA_PROMPT_LAST_SHOWN_KEY = "pwaInstallPromptLastShown";
+const PWA_INSTALLED_KEY = "pwaInstalled";
+const PWA_OPEN_HINT_LAST_SHOWN_KEY = "pwaOpenHintLastShown";
+
+function dateKeyToday(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isStandaloneMode(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const mediaStandalone = window.matchMedia?.("(display-mode: standalone)")?.matches ?? false;
+  const iosStandalone = Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+  return mediaStandalone || iosStandalone;
+}
+
+function isMobileDevice(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+}
+
+function isIosDevice(): boolean {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  return /iphone|ipad|ipod/i.test(navigator.userAgent);
+}
 
 function toRouteStatKey(pathname: string): string {
   if (pathname === "/") return "home";
   if (pathname.startsWith("/kaart")) return "map";
-  if (pathname.startsWith("/blog")) return "blog";
+  if (pathname.startsWith("/info") || pathname.startsWith("/blog")) return "info";
   if (pathname.startsWith("/cannabis-winkel")) return "shopDetail";
   if (pathname.startsWith("/cannabis")) return "cannabis";
   if (pathname.startsWith("/telers")) return "growers";
@@ -72,14 +118,22 @@ function RouteStatsTracker() {
 function App() {
   const [location, setLocation] = useState<LocationObject>({latitude: 0, longitude: 0});
   const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
-  const [isAgeConfirmed, setIsAgeConfirmed] = useState<boolean>(() => {
+  const [ageState, setAgeState] = useState<AgeState>(() => typeof window === "undefined" ? "unknown" : readAgeState());
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [showPwaInstallPrompt, setShowPwaInstallPrompt] = useState<boolean>(false);
+  const [showPwaOpenHint, setShowPwaOpenHint] = useState<boolean>(false);
+  const [pwaInstalled, setPwaInstalled] = useState<boolean>(() => {
     if (typeof window === "undefined") {
       return false;
     }
-
-    return localStorage.getItem("ageVerified18") === "true";
+    return isStandaloneMode() || localStorage.getItem(PWA_INSTALLED_KEY) === "true";
   });
-  const [lastSyncSummary, setLastSyncSummary] = useState<string>("");
+
+  useEffect(() => {
+    const handleAgeChange = (event: Event) => setAgeState((event as CustomEvent<AgeState>).detail);
+    window.addEventListener("weedinfo-age-change", handleAgeChange);
+    return () => window.removeEventListener("weedinfo-age-change", handleAgeChange);
+  }, []);
 
 
   const counter: Worker = useMemo(
@@ -203,27 +257,99 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const syncRef = doc(db, "SyncStatus", "graphql");
-    const unsubscribe = onSnapshot(syncRef, (snapshot) => {
-      if (!snapshot.exists()) {
-        setLastSyncSummary("");
-        return;
+    if (!isMobileDevice()) {
+      return;
+    }
+
+    if (isStandaloneMode()) {
+      localStorage.setItem(PWA_INSTALLED_KEY, "true");
+      setPwaInstalled(true);
+    }
+
+    const onInstalled = () => {
+      localStorage.setItem(PWA_INSTALLED_KEY, "true");
+      localStorage.setItem(PWA_PROMPT_LAST_SHOWN_KEY, dateKeyToday());
+      setPwaInstalled(true);
+      setShowPwaInstallPrompt(false);
+      setDeferredInstallPrompt(null);
+    };
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      const installEvent = event as BeforeInstallPromptEvent;
+      installEvent.preventDefault();
+      setDeferredInstallPrompt(installEvent);
+      if (!pwaInstalled && localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) !== dateKeyToday()) {
+        setShowPwaInstallPrompt(true);
       }
+    };
 
-      const data = snapshot.data() as {
-        status?: string;
-        syncedProducts?: number;
-        syncedShops?: number;
-        syncedGrowers?: number;
-      };
+    window.addEventListener("appinstalled", onInstalled);
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
 
-      setLastSyncSummary(
-        `Status: ${data.status ?? "-"} | Producten: ${data.syncedProducts ?? 0} | Winkels: ${data.syncedShops ?? 0} | Telers: ${data.syncedGrowers ?? 0}`
-      );
-    });
+    return () => {
+      window.removeEventListener("appinstalled", onInstalled);
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+    };
+  }, [pwaInstalled]);
 
-    return () => unsubscribe();
-  }, []);
+  useEffect(() => {
+    if (!isMobileDevice()) {
+      return;
+    }
+    if (pwaInstalled || isStandaloneMode()) {
+      return;
+    }
+    if (deferredInstallPrompt) {
+      return;
+    }
+    if (!isIosDevice()) {
+      return;
+    }
+    if (localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) === dateKeyToday()) {
+      return;
+    }
+    setShowPwaInstallPrompt(true);
+  }, [deferredInstallPrompt, pwaInstalled]);
+
+  useEffect(() => {
+    if (!isMobileDevice()) {
+      return;
+    }
+    if (!pwaInstalled || isStandaloneMode()) {
+      return;
+    }
+    if (localStorage.getItem(PWA_OPEN_HINT_LAST_SHOWN_KEY) === dateKeyToday()) {
+      return;
+    }
+    setShowPwaOpenHint(true);
+  }, [pwaInstalled]);
+
+  const closePwaInstallPromptForToday = () => {
+    localStorage.setItem(PWA_PROMPT_LAST_SHOWN_KEY, dateKeyToday());
+    setShowPwaInstallPrompt(false);
+  };
+
+  const handleInstallPwa = async () => {
+    if (!deferredInstallPrompt) {
+      closePwaInstallPromptForToday();
+      return;
+    }
+
+    await deferredInstallPrompt.prompt();
+    const choice = await deferredInstallPrompt.userChoice;
+    localStorage.setItem(PWA_PROMPT_LAST_SHOWN_KEY, dateKeyToday());
+    if (choice.outcome === "accepted") {
+      localStorage.setItem(PWA_INSTALLED_KEY, "true");
+      setPwaInstalled(true);
+    }
+    setShowPwaInstallPrompt(false);
+    setDeferredInstallPrompt(null);
+  };
+
+  const closePwaOpenHintForToday = () => {
+    localStorage.setItem(PWA_OPEN_HINT_LAST_SHOWN_KEY, dateKeyToday());
+    setShowPwaOpenHint(false);
+  };
 
   useEffect(() => {
     let lat = localStorage.getItem('myLocationLat') ?? "0"
@@ -265,48 +391,60 @@ function App() {
   return (
     <div className="App">
       <AuthProvider>
-        <Dialog open={!isAgeConfirmed}>
-          <DialogTitle>18+ Confirmatie</DialogTitle>
+        <GtmManager />
+        <AgeGate state={ageState} onChange={setAgeState} />
+        <Dialog open={ageState === "age_verified" && showPwaInstallPrompt}>
+          <DialogTitle>Installeer WeedInfo als app</DialogTitle>
           <DialogContent>
             <Typography variant="body2">
-              Deze app bevat informatie over cannabis en is alleen bedoeld voor 18 jaar en ouder.
-              Bevestig dat je 18+ bent om door te gaan.
+              Installeer de PWA voor sneller openen, offline toegang en een app-ervaring op je toestel.
             </Typography>
+            {!deferredInstallPrompt && isIosDevice() && (
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                Op iPhone/iPad: tik op delen in Safari en kies daarna &quot;Zet op beginscherm&quot;.
+              </Typography>
+            )}
           </DialogContent>
           <DialogActions>
-            <Button
-              color="inherit"
-              onClick={() => {
-                window.location.href = "https://www.google.com";
-              }}
-            >
-              Nee
+            <Button color="inherit" onClick={closePwaInstallPromptForToday}>
+              Later
             </Button>
             <Button
               variant="contained"
               onClick={() => {
-                localStorage.setItem("ageVerified18", "true");
-                setIsAgeConfirmed(true);
+                void handleInstallPwa();
               }}
             >
-              Ja, ik ben 18+
+              {deferredInstallPrompt ? "Installeren" : "Begrepen"}
             </Button>
           </DialogActions>
         </Dialog>
+        <Dialog open={ageState === "age_verified" && showPwaOpenHint}>
+          <DialogTitle>App is al geïnstalleerd</DialogTitle>
+          <DialogContent>
+            <Typography variant="body2">
+              Open WeedInfo via het icoon op je beginscherm voor de echte PWA-ervaring. Browsers laten niet toe om automatisch vanuit een webtab de geïnstalleerde PWA te starten.
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button color="inherit" onClick={closePwaOpenHintForToday}>
+              Sluiten
+            </Button>
+          </DialogActions>
+        </Dialog>
+        <Box id="weedinfo-app-content" aria-hidden={ageState !== "age_verified"} sx={{ filter: ageState !== "age_verified" ? "blur(18px)" : "none", pointerEvents: ageState !== "age_verified" ? "none" : "auto", userSelect: ageState !== "age_verified" ? "none" : "auto" }}>
         <BrowserRouter>
           <TopBar />
+          <SeoManager />
           <RouteStatsTracker />
-          <Box sx={{ pt: 8 }}>
+          <Box sx={{ pt: { xs: 8, md: 12 } }}>
+            <Box sx={{ maxWidth: 1130, mx: "auto", px: { xs: 1, sm: 1.5, md: 2 } }}>
             {!isOnline && (
               <Alert severity="info">
                 Je bent offline. De app toont lokaal beschikbare data en synchroniseert weer zodra je online bent.
               </Alert>
             )}
-            {isOnline && (
-              <Alert severity="success">
-                {lastSyncSummary || "Catalogus sync draait via background worker."}
-              </Alert>
-            )}
+            <Suspense fallback={<Loader size={40} display="block" />}>
             <Routes>
             <Route
               path='/'
@@ -318,19 +456,22 @@ function App() {
               element={<PageMap shopList={shopList} lengthCount={lengthCount} location={location} setLocation={setLocation} />}
             />
 
-            <Route
-              path='/blog'
-              element={<PageBlog />}
-            />
-
-            <Route
-              path='/zoeken'
-              element={<PageBlog />}
-            />
+            <Route path='/blog' element={<Navigate to='/info' replace />} />
+            <Route path='/zoeken' element={<Navigate to='/info' replace />} />
+            <Route path='/info/*' element={<PageBlog />} />
 
             <Route
               path='/cannabis'
               element={<PageProductsOverview />}
+            />
+            <Route path='/cannabis/wiet' element={<PageProductsOverview />} />
+            <Route path='/cannabis/hasj' element={<PageProductsOverview />} />
+            <Route path='/cannabis/joints' element={<PageProductsOverview />} />
+            <Route path='/cannabis/edibles' element={<PageProductsOverview />} />
+
+            <Route
+              path='/keuzehulp'
+              element={<PageKeuzehulp />}
             />
 
             <Route
@@ -380,10 +521,89 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path='/voorwaarden' element={<Navigate to='/gebruiksvoorwaarden' replace />} />
+            <Route path='/over-weedinfo' element={<LegalPage title='Over WeedInfo' intro='WeedInfo is een onafhankelijk informatieplatform over gereguleerde cannabisproducten en telers.' sections={[{ title: "Wat WeedInfo doet", body: "WeedInfo helpt consumenten feitelijke productinformatie te vinden en vergelijken." }, { title: "Geen verkoop", body: "Je kunt via WeedInfo geen cannabis kopen, bestellen of reserveren. WeedInfo bemiddelt niet bij verkoop." }]} />} />
+            <Route path='/informatie/gezondheid-en-risicos' element={<HealthInfoPage />} />
+            <Route path='/gebruiksvoorwaarden' element={<LegalPage title='Gebruiksvoorwaarden' intro='Gebruik WeedInfo uitsluitend als informatiebron.' sections={[{ title: "Geen verkoop of advies", body: "De informatie is geen verkoopaanbod, medisch advies of uitnodiging om cannabis te gebruiken." }, { title: "Gebruikersbijdragen", body: "Gebruikersbijdragen mogen niet misleidend, commercieel, beledigend of in strijd met de wet zijn." }, { title: "Beschikbaarheid", body: "We streven naar goede beschikbaarheid, maar kunnen geen ononderbroken werking garanderen." }]} />} />
+            <Route
+              path='/privacy'
+              element={
+                <LegalPage
+                  title='Privacyverklaring'
+                  intro='WeedInfo verwerkt persoonsgegevens om accountfunctionaliteit, likes en reviews mogelijk te maken.'
+                  sections={[
+                    {
+                      title: "Welke gegevens",
+                      body: "Accountgegevens zoals e-mail, gebruikersnaam, profielafbeelding, likes, reviews en technische gegevens die nodig zijn voor beveiliging en werking.",
+                    },
+                    {
+                      title: "Doel van verwerking",
+                      body: "We gebruiken gegevens voor authenticatie, profielopbouw, reviews en het verbeteren van de website. Niet-noodzakelijke analytics worden alleen na toestemming geactiveerd.",
+                    },
+                    {
+                      title: "Bewaartermijn en rechten",
+                      body: "Gegevens worden niet langer bewaard dan nodig. Je kunt verzoeken om inzage, correctie of verwijdering van je persoonsgegevens.",
+                    },
+                  ]}
+                />
+              }
+            />
+            <Route
+              path='/cookies'
+              element={
+                <LegalPage
+                  title='Cookiebeleid'
+                  intro='WeedInfo gebruikt functionele opslag en optionele analytics voor een betere gebruikerservaring.'
+                  sections={[
+                    {
+                      title: "Functionele opslag",
+                      body: "Voorbeelden zijn leeftijdsbevestiging, sessiestatus en lokale cache voor offline gebruik.",
+                    },
+                    {
+                      title: "Analytics",
+                      body: "Wanneer Google Tag Manager is geconfigureerd via de omgeving, kunnen metingen geactiveerd worden voor verkeersinzichten.",
+                    },
+                    {
+                      title: "Beheer",
+                      body: "Je kunt browseropslag en cookies beheren via je browserinstellingen.",
+                    },
+                  ]}
+                />
+              }
+            />
+            <Route
+              path='/disclaimer'
+              element={
+                <LegalPage
+                  title='Disclaimer'
+                  intro='De informatie op WeedInfo is bedoeld als algemene informatie en niet als medisch of juridisch advies.'
+                  sections={[
+                    {
+                      title: "Geen medisch advies",
+                      body: "Gebruik informatie op dit platform niet als vervanging voor professioneel medisch advies.",
+                    },
+                    {
+                      title: "Aansprakelijkheid",
+                      body: "WeedInfo is niet aansprakelijk voor schade voortvloeiend uit gebruik van het platform of vertrouwen op informatie van derden.",
+                    },
+                    {
+                      title: "Wet- en regelgeving",
+                      body: "Je blijft zelf verantwoordelijk voor naleving van lokale wet- en regelgeving.",
+                    },
+                  ]}
+                />
+              }
+            />
+            <Route path='*' element={<Navigate to='/' replace />} />
             </Routes>
+            </Suspense>
+            <SiteFooter />
+            </Box>
           </Box>
           <BottomNav />
         </BrowserRouter>
+        <ScrollToTopButton />
+        </Box>
       </AuthProvider>
     </div>
   );

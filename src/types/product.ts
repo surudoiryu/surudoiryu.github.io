@@ -1,9 +1,21 @@
 import { DocumentReference } from "firebase/firestore";
+import { EffectType } from "./effect";
 import { GrowerType } from "./grower";
+import { TasteType } from "./taste";
+import { TerpeneType } from "./terpene";
 
 export type ProductType = {
     id: number;
     shortcode: string;
+    legacyShortcodes?: string[];
+    categoryId?: string;
+    subCategoryId?: string;
+    categoryName?: string;
+    subCategoryName?: string;
+    leafletId?: string;
+    mainImageId?: string;
+    promoImageId?: string;
+    promoVideoId?: string;
     title: string;
     brand: GrowerType;
     grower: number;
@@ -17,13 +29,13 @@ export type ProductType = {
     cbdMax: number;
     rating: number;
     images: ProductImages;
-    dominantTerpene: ProductTerpenes;
-    terpenes?: DocumentReference[];
-    tastes?: DocumentReference[];
-    dominantPositiveEffect: ProductEffects;
-    positiveEffects?: DocumentReference[];
-    dominantNegativeEffect: ProductEffects;
-    negativeEffects?: DocumentReference[];
+    dominantTerpene: ProductTerpenes | TerpeneType;
+    terpenes?: Array<DocumentReference | ProductTerpenes | TerpeneType>;
+    tastes?: Array<DocumentReference | ProductTastes | TasteType>;
+    dominantPositiveEffect: ProductEffects | EffectType;
+    positiveEffects?: Array<DocumentReference | ProductEffects | EffectType>;
+    dominantNegativeEffect: ProductEffects | EffectType;
+    negativeEffects?: Array<DocumentReference | ProductEffects | EffectType>;
     variants: ProductVariants[];
 };
 

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <title>WeedInfo</title>
+    <script>
+      (function () {
+        var path = window.location.pathname + window.location.search + window.location.hash;
+        var cleanPath = path.replace(/^\/+/, "");
+        var nextUrl = window.location.origin + "/?pwa_path=" + encodeURIComponent(cleanPath);
+        window.location.replace(nextUrl);
+      })();
+    </script>
+  </head>
+  <body></body>
+</html>

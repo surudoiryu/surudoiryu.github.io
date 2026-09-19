@@ -1,7 +1,7 @@
 {
   "name": "weedinfo",
   "version": "0.1.0",
-  "homepage": "https://surudoiryu.github.io/",
+  "homepage": "https://weedinfo.nl/",
   "private": true,
   "dependencies": {
     "@emotion/react": "^11.13.3",
@@ -48,7 +48,12 @@
     "deploy:firestore:rules": "node scripts/firestore-deploy-rules.mjs",
     "dev": "react-scripts start",
     "start": "react-scripts start",
+    "start:ssr": "node server/catalog-server.mjs",
+    "audit:generations": "node scripts/public-generation-cleanup.mjs",
+    "profile:ssr": "node scripts/ssr-performance-profile.mjs",
     "build": "react-scripts build",
+    "build:frontend:clean": "node scripts/clean-frontend-build.mjs",
+    "audit:frontend:clean": "set BUNDLE_BUILD_DIR=build-clean&& node scripts/bundle-secret-audit.mjs",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },

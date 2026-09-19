@@ -1,5 +1,6 @@
 export type GrowerType = {
     id: number;
+    logoMediaId?: string;
     title: string;
     thumbnailUrl: string;
     description: string;

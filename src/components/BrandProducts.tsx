@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
     Box,
     Button,
+    Card,
+    CardContent,
     Chip,
     Drawer,
     FormControlLabel,
@@ -11,10 +13,12 @@ import {
     Switch,
     TextField,
     Typography,
+    useMediaQuery,
+    useTheme,
 } from "@mui/material";
 import TuneIcon from "@mui/icons-material/Tune";
 import { DocumentReference, collection, getDoc, onSnapshot } from "firebase/firestore";
-import { productCollectionRef } from "../firebaseCollections";
+import { categoryCollectionRef, productCollectionRef } from "../firebaseCollections";
 import { ProductType } from "../types/product";
 import { GrowerType } from "../types/grower";
 import { EffectType } from "../types/effect";
@@ -24,6 +28,8 @@ import ProductCard from "./ProductCard";
 import { db } from "../firebaseConfig";
 import { useAuth } from "../context/AuthContext";
 import { viewStatsCollectionRef } from "../firebaseCollections";
+import { aggregateProductReviewStats } from "../utils/reviewStats";
+import { ProductReview } from "../types/user";
 
 interface BrandProps {
     brandId?: string;
@@ -31,7 +37,15 @@ interface BrandProps {
     showFilters?: boolean;
     initialSearchTerm?: string;
     initialType?: string;
+    initialProductForms?: string[];
+    initialThcRange?: [number, number];
+    initialCbdRange?: [number, number];
+    initialTastes?: string[];
+    initialPositiveEffects?: string[];
+    initialMinimumRating?: number;
+    initialOnlyWithReviews?: boolean;
     sortByViews?: boolean;
+    carouselOnMobile?: boolean;
 }
 
 interface ProductItem {
@@ -102,8 +116,25 @@ function toPositiveEffectNames(product: ProductType): string[] {
     return Array.from(new Set([...dominant, ...extra]));
 }
 
-const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTerm, initialType, sortByViews = false }: BrandProps) => {
+const ProductenPerMerk = ({
+    brandId,
+    limit,
+    showFilters = false,
+    initialSearchTerm,
+    initialType,
+    initialProductForms,
+    initialThcRange,
+    initialCbdRange,
+    initialTastes,
+    initialPositiveEffects,
+    initialMinimumRating,
+    initialOnlyWithReviews,
+    sortByViews = false,
+    carouselOnMobile = false,
+}: BrandProps) => {
     const { profile } = useAuth();
+    const theme = useTheme();
+    const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
     const [producten, setProducten] = useState<ProductItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -111,20 +142,25 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
 
     const [searchTerm, setSearchTerm] = useState(initialSearchTerm ?? "");
     const [selectedTypes, setSelectedTypes] = useState<string[]>(initialType ? [initialType] : []);
-    const [thcRange, setThcRange] = useState<[number, number]>([0, 35]);
-    const [cbdRange, setCbdRange] = useState<[number, number]>([0, 30]);
-    const [selectedTastes, setSelectedTastes] = useState<string[]>([]);
+    const [selectedProductForms, setSelectedProductForms] = useState<string[]>(initialProductForms ?? []);
+    const [thcRange, setThcRange] = useState<[number, number]>(initialThcRange ?? [0, 35]);
+    const [cbdRange, setCbdRange] = useState<[number, number]>(initialCbdRange ?? [0, 30]);
+    const [selectedTastes, setSelectedTastes] = useState<string[]>(initialTastes ?? []);
     const [selectedGrowers, setSelectedGrowers] = useState<string[]>([]);
-    const [selectedPositiveEffects, setSelectedPositiveEffects] = useState<string[]>([]);
+    const [selectedPositiveEffects, setSelectedPositiveEffects] = useState<string[]>(initialPositiveEffects ?? []);
     const [onlyLiked, setOnlyLiked] = useState(false);
-    const [onlyWithReviews, setOnlyWithReviews] = useState(false);
-    const [minimumRating, setMinimumRating] = useState(0);
+    const [onlyWithReviews, setOnlyWithReviews] = useState(initialOnlyWithReviews ?? false);
+    const [minimumRating, setMinimumRating] = useState(initialMinimumRating ?? 0);
 
     const [reviewedProductCodes, setReviewedProductCodes] = useState<Set<string>>(new Set());
     const [reviewStatsByProduct, setReviewStatsByProduct] = useState<
         Record<string, { count: number; rating: number }>
     >({});
     const [viewStatsByProduct, setViewStatsByProduct] = useState<Record<string, number>>({});
+    const [categoryNamesById, setCategoryNamesById] = useState<Record<string, string>>({});
+    const [desktopFiltersVisible, setDesktopFiltersVisible] = useState(true);
+    const [visibleCount, setVisibleCount] = useState(24);
+    const loadMoreRef = useRef<HTMLButtonElement | null>(null);
 
     useEffect(() => {
         setSearchTerm(initialSearchTerm ?? "");
@@ -135,37 +171,48 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
     }, [initialType]);
 
     useEffect(() => {
-        const unsubscribeReviews = onSnapshot(collection(db, "reviews"), (snapshot) => {
-            const stats: Record<string, { sum: number; count: number }> = {};
-            const codes = snapshot.docs
-                .map((docItem) => docItem.data() as { productShortcode?: string; rating?: number })
-                .filter((item) => Boolean(item.productShortcode))
-                .map((item) => {
-                    const code = item.productShortcode as string;
-                    const rating = Number(item.rating ?? 0);
-                    if (!stats[code]) {
-                        stats[code] = { sum: 0, count: 0 };
-                    }
-                    stats[code].sum += rating;
-                    stats[code].count += 1;
-                    return code;
-                })
-                .filter((code): code is string => Boolean(code));
-            setReviewedProductCodes(new Set(codes));
+        setSelectedProductForms(initialProductForms ?? []);
+    }, [initialProductForms]);
 
-            const normalized: Record<string, { count: number; rating: number }> = {};
-            Object.entries(stats).forEach(([productCode, value]) => {
-                const average = value.count ? Math.ceil(value.sum / value.count) : 0;
-                normalized[productCode] = {
-                    count: value.count,
-                    rating: Math.min(5, Math.max(0, average)),
-                };
-            });
+    useEffect(() => {
+        setThcRange(initialThcRange ?? [0, 35]);
+    }, [initialThcRange]);
+
+    useEffect(() => {
+        setCbdRange(initialCbdRange ?? [0, 30]);
+    }, [initialCbdRange]);
+
+    useEffect(() => {
+        setSelectedTastes(initialTastes ?? []);
+    }, [initialTastes]);
+
+    useEffect(() => {
+        setSelectedPositiveEffects(initialPositiveEffects ?? []);
+    }, [initialPositiveEffects]);
+
+    useEffect(() => {
+        setMinimumRating(initialMinimumRating ?? 0);
+    }, [initialMinimumRating]);
+
+    useEffect(() => {
+        setOnlyWithReviews(initialOnlyWithReviews ?? false);
+    }, [initialOnlyWithReviews]);
+
+    useEffect(() => {
+        const unsubscribeReviews = onSnapshot(collection(db, "reviews"), (snapshot) => {
+            const reviewItems = snapshot.docs.map((docItem) => ({
+                id: docItem.id,
+                ...(docItem.data() as Omit<ProductReview, "id">),
+            })) as ProductReview[];
+
+            const productList = producten.map((item) => item.data);
+            const normalized = aggregateProductReviewStats(reviewItems, productList);
             setReviewStatsByProduct(normalized);
+            setReviewedProductCodes(new Set(Object.keys(normalized)));
         });
 
         return () => unsubscribeReviews();
-    }, []);
+    }, [producten]);
 
     useEffect(() => {
         const unsubscribe = onSnapshot(viewStatsCollectionRef, (snapshot) => {
@@ -177,6 +224,23 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
                 }
             });
             setViewStatsByProduct(nextStats);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        const unsubscribe = onSnapshot(categoryCollectionRef, (snapshot) => {
+            const nextMap: Record<string, string> = {};
+            snapshot.docs.forEach((item) => {
+                const data = item.data() as { id?: string; name?: string };
+                const key = (data.id ?? item.id ?? "").toString();
+                const name = (data.name ?? "").toString();
+                if (key && name) {
+                    nextMap[key] = name;
+                }
+            });
+            setCategoryNamesById(nextMap);
         });
 
         return () => unsubscribe();
@@ -271,6 +335,10 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
 
                         const enrichedProduct = {
                             ...productData,
+                            categoryName:
+                                productData.categoryName ||
+                                (productData.categoryId ? categoryNamesById[productData.categoryId] : undefined) ||
+                                "Cannabis",
                             brand: (brandData ?? productData.brand) as ProductType["brand"],
                             dominantTerpene: (terpeneData ??
                                 productData.dominantTerpene) as ProductType["dominantTerpene"],
@@ -309,7 +377,7 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
         });
 
         return () => unsubscribe();
-    }, [brandId, limit]);
+    }, [brandId, categoryNamesById, limit]);
 
     const allTypes = useMemo(
         () =>
@@ -373,6 +441,10 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
             }
 
             if (selectedTypes.length && !selectedTypes.includes(data.type)) {
+                return false;
+            }
+
+            if (selectedProductForms.length && !selectedProductForms.includes(data.categoryName || "")) {
                 return false;
             }
 
@@ -444,6 +516,7 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
         searchTerm,
         selectedGrowers,
         selectedPositiveEffects,
+        selectedProductForms,
         selectedTastes,
         selectedTypes,
         thcRange,
@@ -454,6 +527,7 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
 
     const resetFilters = () => {
         setSelectedTypes([]);
+        setSelectedProductForms([]);
         setThcRange([0, 35]);
         setCbdRange([0, 30]);
         setSelectedTastes([]);
@@ -464,6 +538,29 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
         setMinimumRating(0);
     };
 
+    useEffect(() => {
+        setVisibleCount(24);
+    }, [searchTerm, selectedTypes, selectedProductForms, thcRange, cbdRange, selectedTastes, selectedGrowers, selectedPositiveEffects, onlyLiked, onlyWithReviews, minimumRating]);
+
+    const displayedProducts = showFilters && limit === undefined
+        ? filteredProducts.slice(0, visibleCount)
+        : filteredProducts;
+
+    useEffect(() => {
+        const button = loadMoreRef.current;
+        if (!button || !("IntersectionObserver" in window)) return;
+        const observer = new IntersectionObserver(
+            (entries) => {
+                if (entries.some((entry) => entry.isIntersecting)) {
+                    setVisibleCount((current) => Math.min(current + 24, filteredProducts.length));
+                }
+            },
+            { rootMargin: "240px" }
+        );
+        observer.observe(button);
+        return () => observer.disconnect();
+    }, [filteredProducts.length, visibleCount]);
+
     if (loading) {
         return <div>Loading...</div>;
     }
@@ -471,6 +568,171 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
     if (error) {
         return <Alert severity="error">{error}</Alert>;
     }
+
+    const filterControls = (
+        <>
+            <Typography variant="subtitle2">Soort product</Typography>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
+                {[
+                    ["Wiet", ["Wiet"]],
+                    ["Hasj", ["Hasj"]],
+                    ["Joints", ["Joints Wiet", "Joints Hasj"]],
+                    ["Edibles", ["Edibles"]],
+                ].map(([label, forms]) => {
+                    const values = forms as string[];
+                    const selected = values.every((value) => selectedProductForms.includes(value));
+                    return (
+                        <Chip
+                            key={label as string}
+                            label={label as string}
+                            color={selected ? "success" : "default"}
+                            onClick={() => setSelectedProductForms((current) => selected
+                                ? current.filter((value) => !values.includes(value))
+                                : Array.from(new Set([...current, ...values])))}
+                        />
+                    );
+                })}
+            </Stack>
+
+            <Typography variant="subtitle2">Type</Typography>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
+                {allTypes.map((type) => (
+                    <Chip
+                        key={type}
+                        label={type}
+                        color={selectedTypes.includes(type) ? "success" : "default"}
+                        onClick={() =>
+                            setSelectedTypes((prev) =>
+                                prev.includes(type)
+                                    ? prev.filter((item) => item !== type)
+                                    : [...prev, type]
+                            )
+                        }
+                    />
+                ))}
+            </Stack>
+
+            <Typography variant="subtitle2">THC range</Typography>
+            <Slider
+                value={thcRange}
+                onChange={(_, value) => setThcRange(value as [number, number])}
+                valueLabelDisplay="auto"
+                min={0}
+                max={35}
+                sx={{ mb: 2 }}
+            />
+
+            <Typography variant="subtitle2">CBD range</Typography>
+            <Slider
+                value={cbdRange}
+                onChange={(_, value) => setCbdRange(value as [number, number])}
+                valueLabelDisplay="auto"
+                min={0}
+                max={30}
+                sx={{ mb: 2 }}
+            />
+
+            <Typography variant="subtitle2">Smaken</Typography>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
+                {allTastes.map((taste) => (
+                    <Chip
+                        key={taste}
+                        label={taste}
+                        color={selectedTastes.includes(taste) ? "success" : "default"}
+                        onClick={() =>
+                            setSelectedTastes((prev) =>
+                                prev.includes(taste)
+                                    ? prev.filter((item) => item !== taste)
+                                    : [...prev, taste]
+                            )
+                        }
+                    />
+                ))}
+            </Stack>
+
+            <Typography variant="subtitle2">Telers</Typography>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
+                {allGrowers.map((grower) => (
+                    <Chip
+                        key={grower}
+                        label={grower}
+                        color={selectedGrowers.includes(grower) ? "success" : "default"}
+                        onClick={() =>
+                            setSelectedGrowers((prev) =>
+                                prev.includes(grower)
+                                    ? prev.filter((item) => item !== grower)
+                                    : [...prev, grower]
+                            )
+                        }
+                    />
+                ))}
+            </Stack>
+
+            <Typography variant="subtitle2">Positieve effecten</Typography>
+            <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
+                {allPositiveEffects.map((effect) => (
+                    <Chip
+                        key={effect}
+                        label={effect}
+                        color={selectedPositiveEffects.includes(effect) ? "success" : "default"}
+                        onClick={() =>
+                            setSelectedPositiveEffects((prev) =>
+                                prev.includes(effect)
+                                    ? prev.filter((item) => item !== effect)
+                                    : [...prev, effect]
+                            )
+                        }
+                    />
+                ))}
+            </Stack>
+
+            <Typography variant="subtitle2">Minimale beoordeling</Typography>
+            <Slider
+                value={minimumRating}
+                onChange={(_, value) => setMinimumRating(value as number)}
+                valueLabelDisplay="auto"
+                min={0}
+                max={5}
+                step={0.5}
+                sx={{ mb: 1 }}
+            />
+
+            <FormControlLabel
+                control={
+                    <Switch
+                        checked={onlyWithReviews}
+                        onChange={(event) => setOnlyWithReviews(event.target.checked)}
+                    />
+                }
+                label="Alleen soortjes met reviews"
+            />
+            <FormControlLabel
+                control={
+                    <Switch
+                        checked={onlyLiked}
+                        onChange={(event) => setOnlyLiked(event.target.checked)}
+                    />
+                }
+                label="Alleen mijn likes"
+            />
+            {onlyLiked && !profile && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    Log in om op likes te filteren.
+                </Alert>
+            )}
+
+            <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+                <Button variant="outlined" onClick={resetFilters}>
+                    Reset
+                </Button>
+                {!isDesktop && (
+                    <Button variant="contained" onClick={() => setFilterOpen(false)}>
+                        Toepassen ({filteredProducts.length})
+                    </Button>
+                )}
+            </Stack>
+        </>
+    );
 
     return (
         <>
@@ -484,11 +746,18 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
                             value={searchTerm}
                             onChange={(event) => setSearchTerm(event.target.value)}
                         />
-                        <Button variant="outlined" startIcon={<TuneIcon />} onClick={() => setFilterOpen(true)}>
-                            Filters
-                        </Button>
+                        {!isDesktop && (
+                            <Button variant="outlined" startIcon={<TuneIcon />} onClick={() => setFilterOpen(true)}>
+                                Filters
+                            </Button>
+                        )}
+                        {isDesktop && (
+                            <Button variant="outlined" startIcon={<TuneIcon />} onClick={() => setDesktopFiltersVisible((prev) => !prev)}>
+                                {desktopFiltersVisible ? "Filters verbergen" : "Filters tonen"}
+                            </Button>
+                        )}
                     </Stack>
-                    {(onlyLiked || onlyWithReviews || minimumRating > 0 || selectedTypes.length > 0) && (
+                    {(onlyLiked || onlyWithReviews || minimumRating > 0 || selectedTypes.length > 0 || selectedProductForms.length > 0) && (
                         <Typography variant="caption" sx={{ color: "text.secondary" }}>
                             {filteredProducts.length} resultaten met actieve filters
                         </Typography>
@@ -496,167 +765,115 @@ const ProductenPerMerk = ({ brandId, limit, showFilters = false, initialSearchTe
                 </Box>
             )}
 
-            <div style={{ width: "100%", overflow: "auto", display: "flex", flexWrap: showFilters ? "wrap" : "nowrap" }}>
-                {filteredProducts.map((product) => (
-                    <div key={`productcontainer-${product.id}`} style={{ minWidth: 350, height: 500, margin: 16 }}>
-                        <ProductCard
-                            key={`productcard-${product.id}`}
-                            product={{
-                                ...product.data,
-                                rating: reviewStatsByProduct[product.data.shortcode]?.rating ?? product.data.rating,
-                            }}
-                            reviewCount={reviewStatsByProduct[product.data.shortcode]?.count ?? 0}
-                        />
-                    </div>
-                ))}
-                {filteredProducts.length === 0 && (
-                    <Typography sx={{ m: 2, color: "text.secondary" }}>
-                        Geen resultaten met deze filters.
-                    </Typography>
-                )}
-            </div>
+            {showFilters && isDesktop ? (
+                <Box sx={{ width: "100%", display: "grid", gridTemplateColumns: desktopFiltersVisible ? "1fr 3fr" : "1fr", gap: 2 }}>
+                    {desktopFiltersVisible && (
+                        <Card sx={{ alignSelf: "start", position: "sticky", top: 96, maxHeight: "calc(100vh - 112px)", overflowY: "auto", overscrollBehavior: "contain" }}>
+                            <CardContent>
+                                <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
+                                    Filters
+                                </Typography>
+                                {filterControls}
+                            </CardContent>
+                        </Card>
+                    )}
+                    <Box
+                        sx={{
+                            width: "100%",
+                            display: "grid",
+                            gap: 2,
+                            gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        }}
+                    >
+                        {displayedProducts.map((product) => (
+                            <div key={`productcontainer-${product.id}`} style={{ minWidth: 0 }}>
+                                <ProductCard
+                                    key={`productcard-${product.id}`}
+                                    product={{
+                                        ...product.data,
+                                        rating: reviewStatsByProduct[product.data.shortcode]?.rating ?? product.data.rating,
+                                    }}
+                                    reviewCount={reviewStatsByProduct[product.data.shortcode]?.count ?? 0}
+                                />
+                            </div>
+                        ))}
+                        {filteredProducts.length === 0 && (
+                            <Typography sx={{ m: 2, color: "text.secondary" }}>
+                                Geen resultaten met deze filters.
+                            </Typography>
+                        )}
+                    </Box>
+                </Box>
+            ) : (
+                <Box
+                    sx={
+                        carouselOnMobile
+                            ? {
+                                width: "100%",
+                                display: { xs: "flex", md: "grid" },
+                                overflowX: { xs: "auto", md: "visible" },
+                                gap: { xs: 1.25, md: 2 },
+                                gridTemplateColumns: { md: "repeat(4, minmax(0, 1fr))" },
+                                pb: { xs: 1, md: 0 },
+                            }
+                            : {
+                                width: "100%",
+                                display: "grid",
+                                gap: { xs: 1, sm: 1.5, md: 2 },
+                                gridTemplateColumns: {
+                                    xs: "1fr",
+                                    sm: "repeat(2, minmax(0, 1fr))",
+                                    md: "repeat(3, minmax(0, 1fr))",
+                                    lg: "repeat(4, minmax(0, 1fr))",
+                                },
+                            }
+                    }
+                >
+                    {displayedProducts.map((product) => (
+                        <div
+                            key={`productcontainer-${product.id}`}
+                            style={{ minWidth: carouselOnMobile ? 280 : 0, flex: carouselOnMobile ? "0 0 280px" : undefined }}
+                        >
+                            <ProductCard
+                                key={`productcard-${product.id}`}
+                                product={{
+                                    ...product.data,
+                                    rating: reviewStatsByProduct[product.data.shortcode]?.rating ?? product.data.rating,
+                                }}
+                                reviewCount={reviewStatsByProduct[product.data.shortcode]?.count ?? 0}
+                            />
+                        </div>
+                    ))}
+                    {filteredProducts.length === 0 && (
+                        <Typography sx={{ m: 2, color: "text.secondary" }}>
+                            Geen resultaten met deze filters.
+                        </Typography>
+                    )}
+                </Box>
+            )}
 
-            <Drawer anchor="bottom" open={filterOpen} onClose={() => setFilterOpen(false)}>
-                <Box sx={{ p: 2, pb: 4 }}>
+            {displayedProducts.length < filteredProducts.length && (
+                <Button
+                    ref={loadMoreRef}
+                    variant="outlined"
+                    onClick={() => setVisibleCount((current) => Math.min(current + 24, filteredProducts.length))}
+                    sx={{ display: "flex", mx: "auto", mt: 2, minHeight: 44 }}
+                >
+                    Meer producten laden
+                </Button>
+            )}
+
+            <Drawer
+                anchor="bottom"
+                open={filterOpen}
+                onClose={() => setFilterOpen(false)}
+                PaperProps={{ sx: { maxHeight: "92dvh", borderTopLeftRadius: 16, borderTopRightRadius: 16 } }}
+            >
+                <Box sx={{ p: 2, pb: 4, overflowY: "auto", overscrollBehavior: "contain" }} role="dialog" aria-label="Productfilters">
                     <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
                         Filters
                     </Typography>
-
-                    <Typography variant="subtitle2">Type</Typography>
-                    <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
-                        {allTypes.map((type) => (
-                            <Chip
-                                key={type}
-                                label={type}
-                                color={selectedTypes.includes(type) ? "success" : "default"}
-                                onClick={() =>
-                                    setSelectedTypes((prev) =>
-                                        prev.includes(type)
-                                            ? prev.filter((item) => item !== type)
-                                            : [...prev, type]
-                                    )
-                                }
-                            />
-                        ))}
-                    </Stack>
-
-                    <Typography variant="subtitle2">THC range</Typography>
-                    <Slider
-                        value={thcRange}
-                        onChange={(_, value) => setThcRange(value as [number, number])}
-                        valueLabelDisplay="auto"
-                        min={0}
-                        max={35}
-                        sx={{ mb: 2 }}
-                    />
-
-                    <Typography variant="subtitle2">CBD range</Typography>
-                    <Slider
-                        value={cbdRange}
-                        onChange={(_, value) => setCbdRange(value as [number, number])}
-                        valueLabelDisplay="auto"
-                        min={0}
-                        max={30}
-                        sx={{ mb: 2 }}
-                    />
-
-                    <Typography variant="subtitle2">Smaken</Typography>
-                    <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
-                        {allTastes.map((taste) => (
-                            <Chip
-                                key={taste}
-                                label={taste}
-                                color={selectedTastes.includes(taste) ? "success" : "default"}
-                                onClick={() =>
-                                    setSelectedTastes((prev) =>
-                                        prev.includes(taste)
-                                            ? prev.filter((item) => item !== taste)
-                                            : [...prev, taste]
-                                    )
-                                }
-                            />
-                        ))}
-                    </Stack>
-
-                    <Typography variant="subtitle2">Telers</Typography>
-                    <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
-                        {allGrowers.map((grower) => (
-                            <Chip
-                                key={grower}
-                                label={grower}
-                                color={selectedGrowers.includes(grower) ? "success" : "default"}
-                                onClick={() =>
-                                    setSelectedGrowers((prev) =>
-                                        prev.includes(grower)
-                                            ? prev.filter((item) => item !== grower)
-                                            : [...prev, grower]
-                                    )
-                                }
-                            />
-                        ))}
-                    </Stack>
-
-                    <Typography variant="subtitle2">Positieve effecten</Typography>
-                    <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
-                        {allPositiveEffects.map((effect) => (
-                            <Chip
-                                key={effect}
-                                label={effect}
-                                color={selectedPositiveEffects.includes(effect) ? "success" : "default"}
-                                onClick={() =>
-                                    setSelectedPositiveEffects((prev) =>
-                                        prev.includes(effect)
-                                            ? prev.filter((item) => item !== effect)
-                                            : [...prev, effect]
-                                    )
-                                }
-                            />
-                        ))}
-                    </Stack>
-
-                    <Typography variant="subtitle2">Minimale beoordeling</Typography>
-                    <Slider
-                        value={minimumRating}
-                        onChange={(_, value) => setMinimumRating(value as number)}
-                        valueLabelDisplay="auto"
-                        min={0}
-                        max={5}
-                        step={0.5}
-                        sx={{ mb: 1 }}
-                    />
-
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={onlyWithReviews}
-                                onChange={(event) => setOnlyWithReviews(event.target.checked)}
-                            />
-                        }
-                        label="Alleen soortjes met reviews"
-                    />
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={onlyLiked}
-                                onChange={(event) => setOnlyLiked(event.target.checked)}
-                            />
-                        }
-                        label="Alleen mijn likes"
-                    />
-                    {onlyLiked && !profile && (
-                        <Alert severity="info" sx={{ mb: 2 }}>
-                            Log in om op likes te filteren.
-                        </Alert>
-                    )}
-
-                    <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
-                        <Button variant="outlined" onClick={resetFilters}>
-                            Reset
-                        </Button>
-                        <Button variant="contained" onClick={() => setFilterOpen(false)}>
-                            Toepassen ({filteredProducts.length})
-                        </Button>
-                    </Stack>
+                    {filterControls}
                 </Box>
             </Drawer>
         </>

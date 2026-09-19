@@ -1,6 +1,8 @@
 import { Alert, Button, Input, Typography } from "@mui/material";
 import { useState } from "react";
 import { useAuth } from "../context/AuthContext";
+import { evaluateAdultBirthDate } from "../utils/age-rule.mjs";
+import { writeAgeState } from "./AgeGate";
 
 type RegisterFormProps = {
     onSuccess: () => void;
@@ -12,8 +14,7 @@ const RegisterForm = ({ onSuccess }: RegisterFormProps) => {
     const [password, setPassword] = useState("");
     const [name, setName] = useState("");
     const [username, setUsername] = useState("");
-    const [avatarUrl, setAvatarUrl] = useState("");
-    const [headerImageUrl, setHeaderImageUrl] = useState("");
+    const [birthDate, setBirthDate] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -23,7 +24,15 @@ const RegisterForm = ({ onSuccess }: RegisterFormProps) => {
         setIsLoading(true);
 
         try {
-            await register({ name, username, avatarUrl, headerImageUrl, email, password });
+            const decision = evaluateAdultBirthDate(birthDate);
+            if (!decision.allowed) {
+                if (decision.reason === "underage") {
+                    writeAgeState("age_denied");
+                    throw new Error("WeedInfo is alleen toegankelijk voor personen van 18 jaar en ouder.");
+                }
+                throw new Error("Vul een geldige geboortedatum in.");
+            }
+            await register({ name, username, birthDate, email, password });
             onSuccess();
         } catch (registerError) {
             const message =
@@ -89,26 +98,17 @@ const RegisterForm = ({ onSuccess }: RegisterFormProps) => {
                     onChange={(event) => setPassword(event.currentTarget.value)}
                 />
                 <Typography variant="body2" sx={{ color: "text.secondary", mt: 2 }}>
-                    Thumbnail URL (optioneel)
+                    Geboortedatum
                 </Typography>
                 <Input
                     fullWidth
-                    aria-label="Thumbnail URL"
-                    type="url"
-                    name="avatarUrl"
-                    value={avatarUrl}
-                    onChange={(event) => setAvatarUrl(event.currentTarget.value)}
-                />
-                <Typography variant="body2" sx={{ color: "text.secondary", mt: 2 }}>
-                    Header afbeelding URL (optioneel)
-                </Typography>
-                <Input
-                    fullWidth
-                    aria-label="Header URL"
-                    type="url"
-                    name="headerImageUrl"
-                    value={headerImageUrl}
-                    onChange={(event) => setHeaderImageUrl(event.currentTarget.value)}
+                    required
+                    aria-label="Geboortedatum"
+                    type="date"
+                    name="birthDate"
+                    autoComplete="bday"
+                    value={birthDate}
+                    onChange={(event) => setBirthDate(event.currentTarget.value)}
                 />
                 <Button
                     type="submit"

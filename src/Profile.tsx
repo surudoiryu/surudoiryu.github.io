@@ -35,6 +35,9 @@ import { GrowerType } from "./types/grower";
 import GrowerCard from "./components/GrowerCard";
 import { ShopType } from "./types/shop";
 import ShopCard from "./components/ShopCard";
+import ReviewCard from "./components/ReviewCard";
+import { ReviewReactionValue, setReviewReaction } from "./services/reviewReactions";
+import { aggregateProductReviewStats } from "./utils/reviewStats";
 
 type ProfileViewProps = {
     activeProfile: UserProfile;
@@ -58,26 +61,6 @@ type AvgStats = {
     shops: number;
     reviews: number;
 };
-
-function toProductReviewStats(reviews: ProductReview[]) {
-    const grouped: Record<string, { sum: number; count: number }> = {};
-    reviews.forEach((item) => {
-        if (!grouped[item.productShortcode]) {
-            grouped[item.productShortcode] = { sum: 0, count: 0 };
-        }
-        grouped[item.productShortcode].sum += Number(item.rating || 0);
-        grouped[item.productShortcode].count += 1;
-    });
-
-    const normalized: Record<string, { count: number; rating: number }> = {};
-    Object.entries(grouped).forEach(([shortcode, value]) => {
-        normalized[shortcode] = {
-            count: value.count,
-            rating: value.count ? Math.min(5, Math.max(0, Math.ceil(value.sum / value.count))) : 0,
-        };
-    });
-    return normalized;
-}
 
 function toTopPercent(uid: string, users: UserProfile[], userReviewCounts: Record<string, number>) {
     const scores: UserScore[] = users.map((item) => {
@@ -158,10 +141,12 @@ function ProfileHeader({
     activeProfile,
     isOwnProfile,
     onEditProfile,
+    onLogout,
 }: {
     activeProfile: UserProfile;
     isOwnProfile: boolean;
     onEditProfile: () => void;
+    onLogout: () => void;
 }) {
     return (
         <Card sx={{ mb: 2 }}>
@@ -183,9 +168,14 @@ function ProfileHeader({
                         sx={{ width: 88, height: 88, border: "3px solid white", mb: 1 }}
                     />
                     {isOwnProfile && (
-                        <Button variant="outlined" onClick={onEditProfile}>
-                            Profiel bewerken
-                        </Button>
+                        <Stack spacing={1} alignItems="flex-end">
+                            <Button variant="outlined" onClick={onEditProfile}>
+                                Profiel bewerken
+                            </Button>
+                            <Button variant="outlined" color="error" onClick={onLogout}>
+                                Uitloggen
+                            </Button>
+                        </Stack>
                     )}
                 </Stack>
                 <Typography variant="h5" sx={{ color: "text.secondary", fontWeight: 700 }}>
@@ -229,7 +219,7 @@ function ProfileView({
     const [bio, setBio] = useState(activeProfile.bio || "");
     const [savingProfile, setSavingProfile] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
-    const { updateProfileDetails } = useAuth();
+    const { updateProfileDetails, user } = useAuth();
 
     React.useEffect(() => {
         setDisplayName(activeProfile.displayName || "");
@@ -316,7 +306,7 @@ function ProfileView({
         };
     }, [activeProfile.likedGrowers, activeProfile.likedProducts, activeProfile.likedShops]);
 
-    const productReviewStats = useMemo(() => toProductReviewStats(allReviews), [allReviews]);
+    const productReviewStats = useMemo(() => aggregateProductReviewStats(allReviews, allProducts), [allProducts, allReviews]);
 
     const reviewCountsByUser = useMemo(() => {
         const grouped: Record<string, number> = {};
@@ -349,11 +339,26 @@ function ProfileView({
                 ...item,
                 growerTitle,
                 growerShortcode,
-                reviewerAvatar: reviewerProfile?.avatarUrl || "",
-                reviewerUsername: reviewerProfile?.username || item.userName,
+                reviewerProfile,
+                productLink: `/cannabis/${item.productShortcode}`,
+                growerLink: growerShortcode ? `/telers/${growerShortcode}` : undefined,
             };
         });
     }, [allProducts, allUsers, reviews]);
+
+    const handleReviewReaction = async (reviewId: string, reaction: ReviewReactionValue) => {
+        if (!user) {
+            return;
+        }
+        if (!navigator.onLine) {
+            return;
+        }
+        try {
+            await setReviewReaction(reviewId, user.uid, reaction);
+        } catch (error) {
+            console.warn("Review-reactie kon niet opgeslagen worden.", error);
+        }
+    };
 
     const handleSaveProfile = async () => {
         setSaveError(null);
@@ -388,7 +393,12 @@ function ProfileView({
 
     return (
         <>
-            <ProfileHeader activeProfile={activeProfile} isOwnProfile={isOwnProfile} onEditProfile={() => setIsEditing(true)} />
+            <ProfileHeader
+                activeProfile={activeProfile}
+                isOwnProfile={isOwnProfile}
+                onEditProfile={() => setIsEditing(true)}
+                onLogout={onLogout}
+            />
 
             <Card sx={{ mb: 2 }}>
                 <CardContent>
@@ -496,38 +506,15 @@ function ProfileView({
                 reviewCards.map((item) => (
                     <Card key={item.id} sx={{ mb: 1 }}>
                         <CardContent>
-                            <Stack direction="row" spacing={1.5} alignItems="center">
-                                <Avatar src={item.reviewerAvatar}>
-                                    {(item.userName || "U").charAt(0).toUpperCase()}
-                                </Avatar>
-                                <Box>
-                                    <Typography variant="subtitle2" sx={{ color: "text.secondary", fontWeight: 700 }}>
-                                        {item.userName}
-                                    </Typography>
-                                    <Typography
-                                        component={RouterLink}
-                                        to={`/profiel/${item.reviewerUsername || item.userId}`}
-                                        variant="caption"
-                                        sx={{ color: "text.secondary", textDecoration: "none" }}
-                                    >
-                                        @{item.reviewerUsername}
-                                    </Typography>
-                                </Box>
-                            </Stack>
-                            <Typography variant="body2" sx={{ color: "text.secondary", fontWeight: 600, mt: 1 }}>
-                                <RouterLink to={`/cannabis/${item.productShortcode}`}>{item.productTitle}</RouterLink>
-                                {" | "}
-                                {item.growerShortcode ? (
-                                    <RouterLink to={`/telers/${item.growerShortcode}`}>{item.growerTitle}</RouterLink>
-                                ) : (
-                                    item.growerTitle
-                                )}
-                                {" | "}
-                                {item.rating}/5
-                            </Typography>
-                            <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                                {item.review}
-                            </Typography>
+                            <ReviewCard
+                                review={item}
+                                reviewerProfile={item.reviewerProfile}
+                                productLink={item.productLink}
+                                growerLink={item.growerLink}
+                                growerTitle={item.growerTitle}
+                                currentUserId={user?.uid}
+                                onReact={handleReviewReaction}
+                            />
                         </CardContent>
                     </Card>
                 ))
@@ -651,49 +638,10 @@ export default function Profile() {
 
     return (
         <section style={{ textAlign: "left", margin: 16, paddingBottom: 88 }}>
-            <Typography variant="h5" sx={{ color: "text.secondary", fontWeight: 600, mb: 2 }}>
+            <Typography component="h1" variant="h5" sx={{ color: "text.secondary", fontWeight: 600, mb: 2 }}>
                 Profiel
             </Typography>
             {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-            {!isPublicView && (
-                <Card sx={{ borderRadius: 3, mb: 2 }}>
-                    <CardContent>
-                        <Typography variant="subtitle2" sx={{ color: "text.secondary", mb: 1 }}>
-                            Publiek profiel openen
-                        </Typography>
-                        <Stack direction="row" spacing={1} alignItems="center">
-                            <TextField
-                                fullWidth
-                                size="small"
-                                label="UID of username"
-                                value={sharedLookup}
-                                onChange={(event) => setSharedLookup(event.target.value)}
-                            />
-                            <Button variant="outlined" onClick={() => { void handleShareLookup(); }}>
-                                Open
-                            </Button>
-                        </Stack>
-                        {sharedProfile && (
-                            <Button sx={{ mt: 1 }} variant="text" onClick={() => {
-                                setSharedProfile(null);
-                                setSharedReviews([]);
-                            }}>
-                                Terug naar mijn profiel
-                            </Button>
-                        )}
-                        {profile && (
-                            <Typography variant="caption" sx={{ color: "text.secondary", display: "block", mt: 1 }}>
-                                Deelbaar profiel:
-                                {" "}
-                                <RouterLink to={`/profiel/${profile.username || profile.uid}`}>
-                                    {window.location.origin}/profiel/{profile.username || profile.uid}
-                                </RouterLink>
-                            </Typography>
-                        )}
-                    </CardContent>
-                </Card>
-            )}
 
             <Card sx={{ borderRadius: 3 }}>
                 <CardContent>

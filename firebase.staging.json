@@ -1,0 +1,37 @@
+{
+  "hosting": {
+    "public": "build",
+    "ignore": ["firebase.staging.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "source": "/static/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public,max-age=31536000,immutable" }
+        ]
+      },
+      {
+        "source": "/service-worker.js",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache,no-store,must-revalidate" }
+        ]
+      },
+      {
+        "source": "/robots.txt",
+        "headers": [
+          { "key": "Cache-Control", "value": "public,max-age=300" }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "run": {
+          "serviceId": "weedinfo-ssr",
+          "region": "europe-west3",
+          "pinTag": true
+        }
+      }
+    ]
+  }
+}
+

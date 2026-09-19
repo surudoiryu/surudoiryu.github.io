@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { GrowerType } from "../types/grower";
-import { useSignedMediaUrl } from "../hooks/useSignedMediaUrl";
+import { growerLogoUrl, MEDIA_PLACEHOLDER, mediaFallback } from "../utils/mediaSource";
 import { useAuth } from "../context/AuthContext";
 import { shareLink } from "../services/share";
 import ProductRating from "./Rating";
@@ -25,7 +25,8 @@ type Props = {
 const GrowerCard = ({ grower, rating = 0, reviewCount = 0 }: Props) => {
     const navigate = useNavigate();
     const { user, isGrowerLiked, toggleGrowerLike } = useAuth();
-    const thumbnailUrl = useSignedMediaUrl(grower?.thumbnailUrl);
+    const thumbnailUrl = growerLogoUrl(grower);
+    const onImageError = mediaFallback();
     if(grower === undefined) return (<></>)
 
     const openGrowerPage = (grower: GrowerType) => {
@@ -87,8 +88,10 @@ const GrowerCard = ({ grower, rating = 0, reviewCount = 0 }: Props) => {
             <CardMedia
                 component="img"
                 height="120"
-                image={thumbnailUrl || grower.thumbnailUrl}
-                alt={grower.title}
+                image={thumbnailUrl || MEDIA_PLACEHOLDER}
+                alt={`Logo van ${grower.title}`}
+                loading="lazy"
+                onError={onImageError}
                 sx={{ objectFit: "scale-down"}}
             />
             <CardContent sx={{ textAlign: 'left' }}>

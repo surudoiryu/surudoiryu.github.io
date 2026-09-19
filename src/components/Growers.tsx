@@ -5,9 +5,13 @@ import { GrowerType } from '../types/grower';
 import GrowerCard from './GrowerCard';
 import { ProductType } from '../types/product';
 import { ProductReview } from '../types/user';
+import { Box } from '@mui/material';
+import { aggregateProductReviewStats } from '../utils/reviewStats';
 
 interface brandProp {
     brandId?: string;
+    limit?: number;
+    carouselOnMobile?: boolean;
 }
 
 interface Grower {
@@ -18,7 +22,7 @@ interface Grower {
     reviewCount: number;
 }
 
-const Leveranciers = ({ brandId }: brandProp) => {
+const Leveranciers = ({ brandId, limit, carouselOnMobile = false }: brandProp) => {
     const [leveranciers, setLeveranciers] = useState<Grower[]>([])
     const [rawGrowers, setRawGrowers] = useState<Grower[]>([]);
     const [products, setProducts] = useState<ProductType[]>([]);
@@ -84,14 +88,15 @@ const Leveranciers = ({ brandId }: brandProp) => {
     }, [brandId]);
 
     useEffect(() => {
-        const productsByCode = new Map<string, ProductType>();
-        products.forEach((product) => {
-            productsByCode.set(product.shortcode, product);
-        });
+        const productStats = aggregateProductReviewStats(reviews, products);
 
         const reviewAggByGrower: Record<string, { sum: number; count: number }> = {};
-        reviews.forEach((review) => {
-            const product = productsByCode.get(review.productShortcode);
+        products.forEach((product) => {
+            const canonicalCode = product.shortcode;
+            const stats = productStats[canonicalCode];
+            if (!stats) {
+                return;
+            }
             const growerShortcode = product?.brand?.shortcode;
             if (!growerShortcode) {
                 return;
@@ -99,11 +104,11 @@ const Leveranciers = ({ brandId }: brandProp) => {
             if (!reviewAggByGrower[growerShortcode]) {
                 reviewAggByGrower[growerShortcode] = { sum: 0, count: 0 };
             }
-            reviewAggByGrower[growerShortcode].sum += Number(review.rating || 0);
-            reviewAggByGrower[growerShortcode].count += 1;
+            reviewAggByGrower[growerShortcode].sum += stats.rating * stats.count;
+            reviewAggByGrower[growerShortcode].count += stats.count;
         });
 
-        const enriched = rawGrowers
+        let enriched = rawGrowers
             .map((grower) => {
                 const code = grower.data.shortcode || "";
                 const stats = reviewAggByGrower[code];
@@ -118,6 +123,10 @@ const Leveranciers = ({ brandId }: brandProp) => {
             })
             .sort((a, b) => b.views - a.views);
 
+        if (typeof limit === "number" && limit > 0) {
+            enriched = enriched.slice(0, limit);
+        }
+
         setLeveranciers(enriched);
     }, [products, rawGrowers, reviews, viewStats]);
 
@@ -126,10 +135,36 @@ const Leveranciers = ({ brandId }: brandProp) => {
     }
 
     return (
-        <>
+        <Box
+            sx={
+                carouselOnMobile
+                    ? {
+                        width: "100%",
+                        display: { xs: "flex", md: "grid" },
+                        overflowX: { xs: "auto", md: "visible" },
+                        gap: { xs: 1.25, md: 2 },
+                        gridTemplateColumns: { md: "repeat(4, minmax(0, 1fr))" },
+                        pb: { xs: 1, md: 0 },
+                    }
+                    : {
+                        width: "100%",
+                        display: "grid",
+                        gap: { xs: 1, sm: 1.5, md: 2 },
+                        gridTemplateColumns: {
+                            xs: "1fr",
+                            sm: "repeat(2, minmax(0, 1fr))",
+                            md: "repeat(3, minmax(0, 1fr))",
+                            lg: "repeat(4, minmax(0, 1fr))",
+                        },
+                    }
+            }
+        >
             {leveranciers.map((leverancier: Grower) => {
                 if (leverancier && leverancier.data) return (
-                    <div key={`growercontainer-${leverancier.id}`} style={{ minWidth: 250, height: 280, margin: 16 }}>
+                    <div
+                        key={`growercontainer-${leverancier.id}`}
+                        style={{ minWidth: carouselOnMobile ? 260 : 0, flex: carouselOnMobile ? "0 0 260px" : undefined }}
+                    >
                         <GrowerCard
                             key={`growercard-${leverancier.id}`}
                             grower={leverancier.data}
@@ -138,10 +173,10 @@ const Leveranciers = ({ brandId }: brandProp) => {
                         />
                     </div>
                 )
-                return ""
+                return null
             }
             )}
-        </>
+        </Box>
     );
 }
 

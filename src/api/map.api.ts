@@ -6,6 +6,7 @@ export const getMapOptions = () => {
                     "maxZoom": 20,
                     "minZoom": 3,
                     "mapTypeId": "roadmap",
+                    "clickableIcons": false,
                     "mapTypeControl": true,
                     "scaleControl": true,
                     "streetViewControl": true,
@@ -77,6 +78,14 @@ export const getMapOptions = () => {
                             "stylers": [
                                 {
                                     "color": "#bdbdbd"
+                                }
+                            ]
+                        },
+                        {
+                            "featureType": "poi",
+                            "stylers": [
+                                {
+                                    "visibility": "off"
                                 }
                             ]
                         },

@@ -8,7 +8,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import ShareIcon from '@mui/icons-material/Share';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ProductenPerMerk from "./components/BrandProducts";
-import { useSignedMediaUrl } from "./hooks/useSignedMediaUrl";
+import { growerLogoUrl, MEDIA_PLACEHOLDER, mediaFallback } from "./utils/mediaSource";
 import { shareLink } from "./services/share";
 import { incrementEntityView } from "./services/viewStats";
 
@@ -19,7 +19,8 @@ export default function PageGrower() {
 
     const [grower, setGrower] = useState<{ id: string; data: GrowerType } | null>(null)
     const [loading, setLoading] = useState(true)
-    const growerLogoUrl = useSignedMediaUrl(grower?.data?.images?.logo || grower?.data?.thumbnailUrl);
+    const growerLogo = growerLogoUrl(grower?.data);
+    const onImageError = mediaFallback();
 
     useEffect(() => {
         void incrementEntityView("grower", growercode).catch((error) => {
@@ -82,11 +83,11 @@ export default function PageGrower() {
                     <FavoriteBorderIcon />
                 </IconButton>
 
-                <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                <Typography component="h1" variant="h5" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                     {grower?.data.title}
                 </Typography>
                 <Typography variant="body1" sx={{ color: 'text.secondary' }}>
-                    <img src={growerLogoUrl || grower?.data.images.logo} alt={grower?.data.title} style={{ maxWidth: "100%" }} />
+                    <img src={growerLogo || MEDIA_PLACEHOLDER} alt={`Logo van ${grower?.data.title || "de teler"}`} width="320" height="180" loading="lazy" onError={onImageError} style={{ maxWidth: "100%", objectFit: "contain" }} />
                 </Typography>
                 
             </section>
@@ -97,7 +98,7 @@ export default function PageGrower() {
                     <br /><br /><br />
                 </Typography>
 
-                <Typography variant="h5" sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                <Typography component="h2" variant="h5" sx={{ color: 'text.secondary', fontWeight: 600 }}>
                     Beschikbare producten
                 </Typography>
                 <div style={{ width: "100%", overflow: "auto", display: "block" }}>

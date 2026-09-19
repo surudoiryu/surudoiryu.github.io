@@ -13,6 +13,17 @@ service cloud.firestore {
       return isSignedIn() && reviewId.matches("^" + request.auth.uid + "_.*$");
     }
 
+    function isReviewReactionUpdate() {
+      return isSignedIn()
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.productShortcode == resource.data.productShortcode
+        && request.resource.data.productTitle == resource.data.productTitle
+        && request.resource.data.review == resource.data.review
+        && request.resource.data.rating == resource.data.rating
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["reactions", "upVotes", "downVotes", "updatedAt"]);
+    }
+
     // Catalog data: alleen lezen vanuit client, schrijven via worker/service account.
     match /Producten/{docId} {
       allow read: if true;
@@ -80,7 +91,7 @@ service cloud.firestore {
     match /reviews/{reviewId} {
       allow read: if true;
       allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow update: if (isSignedIn() && resource.data.userId == request.auth.uid) || isReviewReactionUpdate();
       allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
   }

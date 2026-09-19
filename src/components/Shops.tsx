@@ -5,6 +5,8 @@ import { ShopType } from "../types/shop";
 import ShopCard from "./ShopCard";
 import { ProductType } from "../types/product";
 import { ProductReview } from "../types/user";
+import { Box } from "@mui/material";
+import { aggregateProductReviewStats } from "../utils/reviewStats";
 
 type ShopItem = {
     id: string;
@@ -14,7 +16,12 @@ type ShopItem = {
     reviewCount: number;
 };
 
-export default function Shops() {
+type Props = {
+    limit?: number;
+    carouselOnMobile?: boolean;
+};
+
+export default function Shops({ limit, carouselOnMobile = false }: Props) {
     const [shops, setShops] = useState<ShopItem[]>([]);
     const [rawShops, setRawShops] = useState<ShopItem[]>([]);
     const [products, setProducts] = useState<ProductType[]>([]);
@@ -83,17 +90,9 @@ export default function Shops() {
         products.forEach((product) => {
             shortcodesByProductId.set(product.id, product.shortcode);
         });
+        const reviewByProduct = aggregateProductReviewStats(reviews, products);
 
-        const reviewByProduct: Record<string, { sum: number; count: number }> = {};
-        reviews.forEach((review) => {
-            if (!reviewByProduct[review.productShortcode]) {
-                reviewByProduct[review.productShortcode] = { sum: 0, count: 0 };
-            }
-            reviewByProduct[review.productShortcode].sum += Number(review.rating || 0);
-            reviewByProduct[review.productShortcode].count += 1;
-        });
-
-        const nextShops = rawShops
+        let nextShops = rawShops
             .map((item) => {
                 const productCodes = (item.data.products || [])
                     .map((productId) => shortcodesByProductId.get(productId))
@@ -105,7 +104,7 @@ export default function Shops() {
                         if (!stats) {
                             return acc;
                         }
-                        acc.sum += stats.sum;
+                        acc.sum += stats.rating * stats.count;
                         acc.count += stats.count;
                         return acc;
                     },
@@ -121,8 +120,13 @@ export default function Shops() {
                     reviewCount: totals.count,
                 };
             })
-            .sort((a, b) => b.views - a.views)
-            .slice(0, 12);
+            .sort((a, b) => b.views - a.views);
+
+        if (typeof limit === "number" && limit > 0) {
+            nextShops = nextShops.slice(0, limit);
+        } else {
+            nextShops = nextShops.slice(0, 12);
+        }
 
         setShops(nextShops);
     }, [products, rawShops, reviews, viewStats]);
@@ -132,12 +136,38 @@ export default function Shops() {
     }
 
     return (
-        <>
+        <Box
+            sx={
+                carouselOnMobile
+                    ? {
+                        width: "100%",
+                        display: { xs: "flex", md: "grid" },
+                        overflowX: { xs: "auto", md: "visible" },
+                        gap: { xs: 1.25, md: 2 },
+                        gridTemplateColumns: { md: "repeat(4, minmax(0, 1fr))" },
+                        pb: { xs: 1, md: 0 },
+                    }
+                    : {
+                        width: "100%",
+                        display: "grid",
+                        gap: { xs: 1, sm: 1.5, md: 2 },
+                        gridTemplateColumns: {
+                            xs: "1fr",
+                            sm: "repeat(2, minmax(0, 1fr))",
+                            md: "repeat(3, minmax(0, 1fr))",
+                            lg: "repeat(4, minmax(0, 1fr))",
+                        },
+                    }
+            }
+        >
             {shops.map((shop) => (
-                <div key={`shopcontainer-${shop.id}`} style={{ minWidth: 250, height: 280, margin: 16 }}>
+                <div
+                    key={`shopcontainer-${shop.id}`}
+                    style={{ minWidth: carouselOnMobile ? 260 : 0, flex: carouselOnMobile ? "0 0 260px" : undefined }}
+                >
                     <ShopCard shop={shop.data} rating={shop.rating} reviewCount={shop.reviewCount} />
                 </div>
             ))}
-        </>
+        </Box>
     );
 }
