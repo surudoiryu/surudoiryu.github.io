@@ -1,3 +1,7 @@
+body {
+    overflow-x: hidden;
+}
+
 .home-container {
     margin-bottom: 60px;
 }
@@ -37,6 +41,7 @@
 .home-hero-content {
     width: 100%;
     max-width: 1130px;
+    box-sizing: border-box;
     margin: 0 auto;
     padding: 42px 18px;
     text-align: left;
@@ -200,6 +205,21 @@
     .home-editorial-heading { align-items: flex-start; }
     .home-editorial-grid { grid-template-columns: 1fr; }
     .home-editorial-card { min-height: 260px; }
+}
+
+/* The page wrapper has 8px gutters on phones and 12px on small tablets.
+   Avoid 100vw here: it includes the scrollbar on some mobile browsers. */
+@media (max-width: 599px) {
+    .home-hero { width: calc(100% + 16px); margin-left: -8px; }
+    .home-hero-content h1 { font-size: clamp(1.75rem, 8vw, 2.375rem); }
+    .home-infographic::before,
+    .home-data-inline::before { left: -8px; width: calc(100% + 16px); }
+}
+
+@media (min-width: 600px) and (max-width: 767px) {
+    .home-hero { width: calc(100% + 24px); margin-left: -12px; }
+    .home-infographic::before,
+    .home-data-inline::before { left: -12px; width: calc(100% + 24px); }
 }
 
 @media (min-width: 900px) {

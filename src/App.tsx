@@ -17,6 +17,8 @@ import SeoManager from './components/SeoManager';
 import Loader from './components/Loader';
 import AgeGate, { AgeState, readAgeState } from './components/AgeGate';
 import ScrollToTopButton from './components/ScrollToTopButton';
+import InstallMobileOutlinedIcon from '@mui/icons-material/InstallMobileOutlined';
+import logo from './logo.svg';
 
 const PageHome = lazy(() => import('./Home'));
 const PageMap = lazy(() => import('./Map'));
@@ -278,9 +280,6 @@ function App() {
       const installEvent = event as BeforeInstallPromptEvent;
       installEvent.preventDefault();
       setDeferredInstallPrompt(installEvent);
-      if (!pwaInstalled && localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) !== dateKeyToday()) {
-        setShowPwaInstallPrompt(true);
-      }
     };
 
     window.addEventListener("appinstalled", onInstalled);
@@ -293,25 +292,19 @@ function App() {
   }, [pwaInstalled]);
 
   useEffect(() => {
-    if (!isMobileDevice()) {
-      return;
-    }
-    if (pwaInstalled || isStandaloneMode()) {
-      return;
-    }
-    if (deferredInstallPrompt) {
-      return;
-    }
-    if (!isIosDevice()) {
-      return;
-    }
-    if (localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) === dateKeyToday()) {
-      return;
-    }
-    setShowPwaInstallPrompt(true);
-  }, [deferredInstallPrompt, pwaInstalled]);
+    if (ageState !== "age_verified" || !isMobileDevice() || pwaInstalled || isStandaloneMode()) return;
+    if (!deferredInstallPrompt && !isIosDevice()) return;
+    if (localStorage.getItem(PWA_PROMPT_LAST_SHOWN_KEY) === dateKeyToday()) return;
+
+    // Let the age dialog finish closing before presenting a second dialog.
+    const timer = window.setTimeout(() => setShowPwaInstallPrompt(true), 500);
+    return () => window.clearTimeout(timer);
+  }, [ageState, deferredInstallPrompt, pwaInstalled]);
 
   useEffect(() => {
+    if (ageState !== "age_verified") {
+      return;
+    }
     if (!isMobileDevice()) {
       return;
     }
@@ -322,7 +315,7 @@ function App() {
       return;
     }
     setShowPwaOpenHint(true);
-  }, [pwaInstalled]);
+  }, [ageState, pwaInstalled]);
 
   const closePwaInstallPromptForToday = () => {
     localStorage.setItem(PWA_PROMPT_LAST_SHOWN_KEY, dateKeyToday());
@@ -393,29 +386,44 @@ function App() {
       <AuthProvider>
         <GtmManager />
         <AgeGate state={ageState} onChange={setAgeState} />
-        <Dialog open={ageState === "age_verified" && showPwaInstallPrompt}>
-          <DialogTitle>Installeer WeedInfo als app</DialogTitle>
-          <DialogContent>
-            <Typography variant="body2">
-              Installeer de PWA voor sneller openen, offline toegang en een app-ervaring op je toestel.
+        <Dialog
+          open={ageState === "age_verified" && showPwaInstallPrompt}
+          fullWidth
+          maxWidth="xs"
+          aria-labelledby="pwa-install-title"
+          slotProps={{ backdrop: { sx: { bgcolor: "rgba(9,18,11,.58)", backdropFilter: "blur(5px)" } } }}
+          PaperProps={{ sx: { width: "calc(100% - 32px)", maxWidth: 480, m: 2, borderRadius: 4, overflow: "hidden", textAlign: "center", boxShadow: "0 28px 80px rgba(0,0,0,.32)" } }}
+        >
+          <DialogContent sx={{ px: { xs: 3, sm: 6 }, pt: { xs: 4, sm: 5 }, pb: 2 }}>
+            <Box component="img" src={logo} alt="WeedInfo" width={132} height={72} sx={{ display: "block", width: 132, height: 72, objectFit: "contain", mx: "auto", mb: 1.5 }} />
+            <Box aria-hidden="true" sx={{ width: 42, height: 42, mx: "auto", mb: 1.5, display: "grid", placeItems: "center", borderRadius: "50%", bgcolor: "#e8f4ea", color: "#237a3b" }}>
+              <InstallMobileOutlinedIcon fontSize="small" />
+            </Box>
+            <Typography id="pwa-install-title" component="h2" variant="h5" fontWeight={800}>WeedInfo als app</Typography>
+            <Typography mt={2} color="text.secondary" lineHeight={1.6}>
+              Voeg WeedInfo toe aan je beginscherm voor sneller openen en toegang tot eerder geladen informatie wanneer je offline bent.
             </Typography>
             {!deferredInstallPrompt && isIosDevice() && (
-              <Typography variant="body2" sx={{ mt: 1 }}>
+              <Typography color="text.secondary" lineHeight={1.6} sx={{ mt: 1.5 }}>
                 Op iPhone/iPad: tik op delen in Safari en kies daarna &quot;Zet op beginscherm&quot;.
               </Typography>
             )}
           </DialogContent>
-          <DialogActions>
-            <Button color="inherit" onClick={closePwaInstallPromptForToday}>
-              Later
-            </Button>
+          <DialogActions sx={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 1, px: { xs: 3, sm: 6 }, pt: 1.5, pb: { xs: 4, sm: 5 }, "& > :not(style) ~ :not(style)": { ml: 0 } }}>
             <Button
+              fullWidth
               variant="contained"
+              color="success"
+              size="large"
               onClick={() => {
                 void handleInstallPwa();
               }}
+              sx={{ minHeight: 48, borderRadius: 2, fontWeight: 800, textTransform: "none" }}
             >
               {deferredInstallPrompt ? "Installeren" : "Begrepen"}
+            </Button>
+            <Button fullWidth color="inherit" size="large" onClick={closePwaInstallPromptForToday} sx={{ minHeight: 44, borderRadius: 2, textTransform: "none" }}>
+              Later
             </Button>
           </DialogActions>
         </Dialog>

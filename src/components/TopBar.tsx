@@ -156,6 +156,7 @@ export default function TopBar() {
                     px: { xs: 1, md: 2.5 },
                     maxWidth: 1130,
                     width: "100%",
+                    boxSizing: "border-box",
                     mx: "auto",
                 }}
             >
@@ -187,7 +188,7 @@ export default function TopBar() {
                 )}
 
                 <Autocomplete
-                    sx={{ flex: 1, width: isDesktop ? 360 : "auto", maxWidth: "100%" }}
+                    sx={{ flex: 1, minWidth: 0, width: isDesktop ? 360 : "auto", maxWidth: "100%" }}
                     size="small"
                     options={options}
                     value={searchValue}

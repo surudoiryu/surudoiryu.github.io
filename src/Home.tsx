@@ -10,6 +10,9 @@ type Props = {
     productList: ListType;
 };
 
+const WIET_FORMS = ["Wiet"];
+const HASJ_FORMS = ["Hasj"];
+
 export default function PageHome({ productList: _productList }: Props) {
     const heroImage = process.env.REACT_APP_HOME_HERO_IMAGE || "/images/pexels-perfect-lens-6619578.jpg";
 
@@ -44,14 +47,24 @@ export default function PageHome({ productList: _productList }: Props) {
                 </Typography>
             </Box>
 
-            <section>
+            <section aria-labelledby="home-wiet-heading">
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5, px: 1 }}>
-                    <Typography component="h2" variant="h5" sx={{ color: "text.secondary", fontWeight: 700 }}>
-                        Cannabisproducten
+                    <Typography id="home-wiet-heading" component="h2" variant="h5" sx={{ color: "text.secondary", fontWeight: 700 }}>
+                        Wietproducten
                     </Typography>
-                    <Button component={RouterLink} to="/cannabis" size="small" color="success">Bekijk alles</Button>
+                    <Button component={RouterLink} to="/cannabis/wiet" size="small" color="success" aria-label="Bekijk alle wietproducten">Bekijk alles</Button>
                 </Stack>
-                <ProductenPerMerk limit={8} carouselOnMobile />
+                <ProductenPerMerk limit={4} initialProductForms={WIET_FORMS} carouselOnMobile />
+            </section>
+
+            <section aria-labelledby="home-hasj-heading">
+                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mt: 4, mb: 1.5, px: 1 }}>
+                    <Typography id="home-hasj-heading" component="h2" variant="h5" sx={{ color: "text.secondary", fontWeight: 700 }}>
+                        Hasjproducten
+                    </Typography>
+                    <Button component={RouterLink} to="/cannabis/hasj" size="small" color="success" aria-label="Bekijk alle hasjproducten">Bekijk alles</Button>
+                </Stack>
+                <ProductenPerMerk limit={4} initialProductForms={HASJ_FORMS} carouselOnMobile />
             </section>
 
             <section className="home-knowledge-band">
